@@ -1,7 +1,14 @@
 (* ::Package:: *)
 
+(* ::Section:: *)
+(*Help Section*)
+
+
+SpectraHelp[]
+
+
 (* ::Text:: *)
-(*Here are a set of tools to fit spectra effectively.*)
+(*Here are a set of tools to fit spectra effectively. For more information, see the readme and example usage files at https://github.com/ruffinevans/SpectraFitting*)
 
 
 (* ::Section:: *)
@@ -17,11 +24,40 @@ QuickDD::usage="In a list of points, deletes any points where a previous point w
 
 
 (* ::Text:: *)
+(*Here is a function that will take in imported sheets from an excel file and spit out 2D arrays.*)
+
+
+ProcessXPSSpectra[Spectra_]:=
+Module[{SpecOut=Spectra},
+Table[SpecOut[[i]]=SortBy[Transpose[DeleteCases[Transpose[
+Reverse[TakeWhile[Reverse[Spectra[[i]]],NumberQ[#[[1]]]&]]],Except[_?(NumberQ[#[[1]]]&&#[[1]]>0&)]]],First],
+{i,1,Length[SpecOut]}];
+Return[SpecOut];
+]
+ProcessXPSSpectra::usage="Takes in a list of imported sheets from excel files and spits out a list of 2D arrays, stripping away headers and fixing the formatting. It is used in the GetSpec function when the \"Excel XPS\" file format is specified.";
+
+
+(* ::Text:: *)
 (*Import Spectrum from File. Assume CSV but allow for other options.*)
 
 
-GetSpec[path_,format_:"csv"]:=QuickDD[Import[path,format]]
-GetSpec::usage="Imports a spectrum from a text file. Assumes a standard {energy, amplitude} formatting like a csv file. If the file is organized in essentially the same way but is formatted differently, an optional segcond argument can be included that is passed directly to the Mathematica \"Import[]\" function as a format string. See the usage notes for that function. Sometimes \"Table\" is a useful choice for this argument.";
+GetSpec[path_,format_:"csv",xpsfilter_:"Scan"]:=If[format!="Excel XPS",QuickDD[Import[path,format]],
+Module[{specsout,sheets=Import[path,"Sheets"],keepsheets},
+Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""];
+keepsheets=Flatten[Position[sheets,_?(StringMatchQ[ToString[#],___~~xpsfilter~~___]&)]]//Quiet;
+Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."];
+Print[Part[sheets,keepsheets]];
+Print[ToString[Length[keepsheets]]<>" spectra in all."];
+specsout=Table[Print["Importing Sheet "<>ToString[sheets[[i]]]]; Import[path,{"xlsx","Data",i}],{i,keepsheets}];
+Print["Formatting XPS Spectra"];
+Return[ProcessXPSSpectra[specsout]];
+]
+]
+GetSpec[path_,format_:"csv"]:=GetSpec[path,format,"Scan"];
+GetSpec[path_]:=GetSpec[path,"csv","Scan"];
+GetSpec::usage="Imports a simple spectrum from a text file or a properly formatted set of XPS files from an excel file.
+In the first case, the function assumes a standard {energy, amplitude} formatting like a csv file and does no grooming. If the file is organized in essentially the same way but is formatted differently, an optional segcond argument can be included that is passed directly to the Mathematica \"Import[]\" function as a format string. See the usage notes for that function. Sometimes \"Table\" is a useful choice for this argument.
+If you want to import an Excel file that has been formatted by the Advantage XPS program, put \"Excel XPS\" in the second argument. In this case, the function will return a list of XPS spectra with the headers removed so that the data can be convenienty manipulated. By default the sheets in the excel file that do not have XPS data will be discarded. If you want to keep only certain sheets, the optional third argument will keep all shets matching a particular string. Put in an empty string \"\" to match all sheets. For example, you can use \"O1s\" to only take oxygen data.";
 
 
 (* ::Text:: *)
@@ -55,7 +91,7 @@ If you need additional help, all of the functions have usage instructions that c
 
 
 (* ::Section:: *)
-(*Spectra Manipulation and Fitting*)
+(*Simple Spectra Manipulation and Fitting*)
 
 
 (* ::Text:: *)
@@ -78,7 +114,7 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 
 CoordInit[Spectra_,center_,d_]:=Module[{\[Lambda]list},
 \[Lambda]list=If[ChoiceDialog["Do you want to reset the wavelength list?"],
-\[Lambda]list=Table[{\[Lambda]center,{center-d/2,center+d/2},center-d/4},{i,1,Length[Spectra]}];
+\[Lambda]list=Table[{center,{center-d/2,center+d/2},center-d/4},{i,1,Length[Spectra]}];
 Return[ToFourCoord/@\[Lambda]list]
 ]
 ];
@@ -97,7 +133,7 @@ SetAttributes[PickGuesses,HoldRest]
 PickGuesses[Spectra_,CrdList_]:=Table[
 LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
 ListLinePlot[Spectra[[i]],
-PlotRange->{{\[Lambda]center-\[CapitalDelta]\[Lambda],\[Lambda]center+\[CapitalDelta]\[Lambda]},All},ImageSize->Medium,PlotLabel->Import[DataDir][[i]]],Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
+PlotRange->{{CrdList[[2,1]],CrdList[[2,2]]},All},ImageSize->Medium,PlotLabel->Import[DataDir][[i]]],Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
 ],
 {i,1,Length[Spectra]}]
 
@@ -195,4 +231,132 @@ ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]}
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
 
 
-SpectraHelp[]
+(* ::Section:: *)
+(*Multipeak spectrum fitting*)
+
+
+(* ::Text:: *)
+(*First, define a Gaussian*)
+
+
+gfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]
+
+
+(* ::Text:: *)
+(*Also define Voigt function. Using PDF is too slow (needs to compute complex error function), so better to use approximation. See http://www.casaxps.com/help_manual/line_shapes.htm. This is just a product of a gaussian and a lorentzian*)
+
+
+vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
+
+
+(* ::Text:: *)
+(*This function outputs a n-gaussian model for data. It does not do a very good job of fitting.*)
+
+
+SimpModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres},
+dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
+modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
+objfunc=Total[(data[[All,2]]-(modelfunc/.fitvar->#&)/@data[[All,1]])^2];
+FindMinimum[objfunc,Flatten@dataconfig]
+]
+
+
+(* ::Text:: *)
+(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of *)
+
+
+Model[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
+	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
+	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
+		Method -> {NMinimize,
+			Method -> {"DifferentialEvolution",
+				"ScalingFactor" -> 0.9, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+			}
+		}
+	]
+]
+
+
+VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
+	dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4,0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	modelfunc=vfn[##,fitvar]&@@@dataconfig//Total;
+	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
+		Method -> {NMinimize,
+			Method -> {"DifferentialEvolution",
+				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+			}
+		}
+	]
+]
+
+
+(* ::Text:: *)
+(*This function is similar to model but takes peak positions as given:*)
+
+
+FixedPeaksModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
+	dataconfig={A[#],\[Sigma][#]}&/@Range[n];
+	funcparams={A[#],\[Mu]+offsets[[#]],\[Sigma][#]}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	modelfunc=gfn[##,fitvar]&@@@funcparams//Total;
+	NonlinearModelFit[data,modelfunc,{Flatten@{dataconfig,\[Mu]},Flatten@{guess,Mean[data\[Transpose][[1]]]/2}}\[Transpose],fitvar,
+		Method -> {NMinimize,
+			Method -> {"DifferentialEvolution",
+				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+			}
+		}
+	]
+]
+
+
+FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
+	funcparams={A[#],\[Mu]+offsets[[#]],\[Sigma][#],\[Delta][#]}&/@Range[n];	
+	dataconfig={A[#],\[Sigma][#],\[Delta][#]}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]]/4,0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	modelfunc=vfn[##,fitvar]&@@@funcparams//Total;
+	NonlinearModelFit[data,modelfunc,{Flatten@{dataconfig,\[Mu]},Flatten@{guess,Mean[data\[Transpose][[1]]]/2}}\[Transpose],fitvar,
+		Method -> {NMinimize,
+			Method -> {"DifferentialEvolution",
+				"ScalingFactor" -> 0.7, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+			}
+		}
+	]
+]
+
+
+(* ::Text:: *)
+(*old version*)
+
+
+FixedPeaksModelOLD[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
+	dataconfig={A[#],\[Mu]-offsets[[#]],\[Sigma][#]}&/@Range[n];
+	funcparams={A[#],offsets[[#]],\[Sigma][#]}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
+	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
+		Method -> {NMinimize,
+			Method -> {"DifferentialEvolution",
+				"ScalingFactor" -> 0.7, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+			}
+		}
+	]
+]
+
+
+(* ::Text:: *)
+(*Create a function that gives a goodness of fit in terms of the sum of the squares of the residuals, but only if we're fitting at least one peak (so n=0 is out.)*)
+
+
+modelvalue[data_,n_]/;NumericQ[n]:=If[n>=1,model[data,n][[1]],0]
+
+
+(* ::Input:: *)
+(*fitres=ReleaseHold[Hold[{Round[n],model[data,Round[n]]}]/.FindMinimum[modelvalue[data,Round[n]],{n,3},Method->"PrincipalAxis"][[2]]]*)
