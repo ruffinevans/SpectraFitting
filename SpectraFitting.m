@@ -1,6 +1,6 @@
 (* ::Package:: *)
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Help Section*)
 
 
@@ -61,6 +61,24 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 
 
 (* ::Text:: *)
+(*Function to return the list of sheets:*)
+
+
+GetSheets[path_,xpsfilter_:"Scan"]:=
+Module[{specsout,sheets=Import[path,"Sheets"],keepsheets},
+Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""];
+keepsheets=Flatten[Position[sheets,_?(StringMatchQ[ToString[#],___~~xpsfilter~~___]&)]]//Quiet;
+Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."];
+Print[ToString[Length[keepsheets]]<>" spectra in all."];
+Return[Part[sheets,keepsheets]];
+]
+GetSheets[path_]:=GetSheets[path,"Scan"];
+GetSheets::usage="Imports a simple spectrum from a text file or a properly formatted set of XPS files from an excel file.
+In the first case, the function assumes a standard {energy, amplitude} formatting like a csv file and does no grooming. If the file is organized in essentially the same way but is formatted differently, an optional segcond argument can be included that is passed directly to the Mathematica \"Import[]\" function as a format string. See the usage notes for that function. Sometimes \"Table\" is a useful choice for this argument.
+If you want to import an Excel file that has been formatted by the Advantage XPS program, put \"Excel XPS\" in the second argument. In this case, the function will return a list of XPS spectra with the headers removed so that the data can be convenienty manipulated. By default the sheets in the excel file that do not have XPS data will be discarded. If you want to keep only certain sheets, the optional third argument will keep all shets matching a particular string. Put in an empty string \"\" to match all sheets. For example, you can use \"O1s\" to only take oxygen data.";
+
+
+(* ::Text:: *)
 (*Import all files that are not mathematica files from a folder.*)
 
 
@@ -90,7 +108,7 @@ SpectraHelp[]:=Print["Usage Instructions:\n
 If you need additional help, all of the functions have usage instructions that can be queried with two question marks and the name of the function, e.g. ??ShowFits ."];
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -235,11 +253,31 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (*Multipeak spectrum fitting*)
 
 
+(* ::Subsection::Closed:: *)
+(*More data grooming*)
+
+
+(* ::Text:: *)
+(*Useful function to find x-coordinate corresponding to maximum y-coordinate.*)
+
+
+MaxPos[data_]:=#[[Position[#,Max[#\[Transpose][[2]]]][[1,1]]]][[1]]&[data];
+MaxPos::usage="Gives the x-coordinate corresponding to the maximum y-coordinate, such that data[[MaxPos[data]]] returns the maximum y-value of the list data.";
+
+
+(* ::Text:: *)
+(*Center data around peak value and renormalize by sum:*)
+
+
+CenterAndNormalize[data_]:=SortBy[{data\[Transpose][[1]]-MaxPos[data],data\[Transpose][[2]]/Total[data\[Transpose][[2]]]}\[Transpose],First]
+
+
 (* ::Text:: *)
 (*First, define a Gaussian*)
 
 
 gfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]
+gfn[A_,\[Mu]_,\[Sigma]_,x_,c_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]+c
 
 
 (* ::Text:: *)
@@ -247,6 +285,14 @@ gfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]
 
 
 vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
+
+
+(* ::Subsection::Closed:: *)
+(*Peak fitting functions*)
+
+
+(* ::Subsubsection:: *)
+(*Free peak positions*)
 
 
 (* ::Text:: *)
@@ -267,12 +313,12 @@ FindMinimum[objfunc,Flatten@dataconfig]
 
 Model[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
+	guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
 	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
 		Method -> {NMinimize,
 			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.9, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
 				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
 			}
 		}
@@ -293,6 +339,10 @@ VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 		}
 	]
 ]
+
+
+(* ::Subsubsection::Closed:: *)
+(*Fixed peak positions*)
 
 
 (* ::Text:: *)
@@ -323,7 +373,7 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 	NonlinearModelFit[data,modelfunc,{Flatten@{dataconfig,\[Mu]},Flatten@{guess,Mean[data\[Transpose][[1]]]/2}}\[Transpose],fitvar,
 		Method -> {NMinimize,
 			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.7, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"ScalingFactor" -> 0.8, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
 				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
 			}
 		}
@@ -331,23 +381,108 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 ]
 
 
+(* ::Subsection:: *)
+(*Summary generation for multipeak fits*)
+
+
 (* ::Text:: *)
-(*old version*)
+(*Summary data from a single fit. Mostly interested in relative weights (scale as A/\[Sigma]) and positions*)
 
 
-FixedPeaksModelOLD[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
-	dataconfig={A[#],\[Mu]-offsets[[#]],\[Sigma][#]}&/@Range[n];
-	funcparams={A[#],offsets[[#]],\[Sigma][#]}&/@Range[n];
-	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
-	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
-	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
-		Method -> {NMinimize,
-			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.7, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
-				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
-			}
-		}
-	]
+FitSummary[data_,nlm_,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,bounds={data[[1,1]],Last[data][[1]]}},
+	n=Last[params][[1,1]];
+	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
+	datalistraw=dataconfig/.params;
+	totalweight=Total@Abs[datalistraw[[All,1]]^2/datalistraw[[All,3]]];
+	datalist={Abs[datalistraw[[All,1]]^2/(totalweight*datalistraw[[All,3]])],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
+	Print[TableForm[Flatten[{{{"Weights","Positions","\[Sigma]s"}},datalist},1]]];
+	modelfuncs=gfn[##,fitvar]&@@@dataconfig;
+	Print@Show@{
+		ListPlot[data,PlotRange->All],
+		Plot[nlm[fitvar],{fitvar,bounds[[1]],bounds[[2]]},PlotRange->All,PlotStyle->{Pink},ImageSize->Medium],
+		Plot[Evaluate@{modelfuncs/.params},{fitvar,bounds[[1]],bounds[[2]]},PlotRange->All,ImageSize->Medium,PlotStyle->({Directive[Dashed,Thick,ColorData["Rainbow"][#]]} & /@Rescale[Range[n]])]};
+	Print@Show@ListPlot[{data[[All,1]],nlm["FitResiduals"]}\[Transpose],PlotRange->{All,{0,0.01*Max[data\[Transpose][[2]]]}},PlotLabel->"Fit Residuals \[Times] 20",AspectRatio->0.25,ImageSize->Medium];
+	Return[datalist];
+]
+
+
+FitSummaryOLD[nlm_,paramnum_:3]:=Module[{summ,rawweights,weights,centerpos,center,centers,peaklist},
+	summ=Take[Rest[nlm["ParameterTable"][[1,1,All]]]\[Transpose],{2}][[1]];
+	rawweights=Table[Abs[summ[[i]]],{i,1,Length[summ],paramnum}];
+	centerpos=3*(Position[rawweights,Max[rawweights]][[1,1]])-1;
+	center=summ[[centerpos]];
+	weights=Table[Abs[summ[[i]]/summ[[i+2]]],{i,1,Length[summ],paramnum}];
+	centers=Table[summ[[i]]-center,{i,2,Length[summ],paramnum}];
+	peaklist="Peak "<>ToString[#]&/@Range[Length[summ]/paramnum];
+	Print["Sum of Squares of Residuals: "<>ToString[FortranForm[Total[nlm["FitResiduals"]^2]]]];
+	Print[{{"","Weights","Centers"},{peaklist,weights,centers}}//TableForm];
+	Return[SortBy[{centers,weights}\[Transpose],Last]];
+]
+
+
+nlm["ParameterTable"]
+
+
+(* ::Output:: *)
+(*\!\(\**)
+(*StyleBox[*)
+(*TagBox[GridBox[{*)
+(*{"\<\"\"\>", "\<\"Estimate\"\>", "\<\"Standard Error\"\>", "\<\"t\[Hyphen]Statistic\"\>", "\<\"P\[Hyphen]Value\"\>"},*)
+(*{*)
+(*RowBox[{"A", "[", "1", "]"}], *)
+(*RowBox[{"-", "0.23291709063521224`"}], "0.0033328902248036833`", *)
+(*RowBox[{"-", "69.88441710495633`"}], "1.509549895426724`*^-79"},*)
+(*{*)
+(*RowBox[{"\[Mu]", "[", "1", "]"}], "0.04275522572255862`", "0.0014483744723115411`", "29.51945545845142`", "9.449876824885716`*^-48"},*)
+(*{*)
+(*RowBox[{"\[Sigma]", "[", "1", "]"}], *)
+(*RowBox[{"-", "0.3184040654582784`"}], "0.0030526750837916324`", *)
+(*RowBox[{"-", "104.30329357646495`"}], "7.755815920711662`*^-95"},*)
+(*{*)
+(*RowBox[{"A", "[", "2", "]"}], *)
+(*RowBox[{"-", "0.06921306091591771`"}], "0.0019418258534865177`", *)
+(*RowBox[{"-", "35.64328942868216`"}], "1.7933689438219997`*^-54"},*)
+(*{*)
+(*RowBox[{"\[Mu]", "[", "2", "]"}], "0.5510068973652951`", "0.10869124314930771`", "5.069469088769039`", "2.1527397294324207`*^-6"},*)
+(*{*)
+(*RowBox[{"\[Sigma]", "[", "2", "]"}], *)
+(*RowBox[{"-", "1.6639233290904292`"}], "0.09001760347764802`", *)
+(*RowBox[{"-", "18.484421544321524`"}], "3.186444269883481`*^-32"},*)
+(*{*)
+(*RowBox[{"A", "[", "3", "]"}], *)
+(*RowBox[{"-", "0.15617966154772203`"}], "0.0045217926976403415`", *)
+(*RowBox[{"-", "34.53932366895613`"}], "2.447156112685228`*^-53"},*)
+(*{*)
+(*RowBox[{"\[Mu]", "[", "3", "]"}], *)
+(*RowBox[{"-", "0.037325318092026695`"}], "0.005432111963461852`", *)
+(*RowBox[{"-", "6.87123504505962`"}], "8.366146781323371`*^-10"},*)
+(*{*)
+(*RowBox[{"\[Sigma]", "[", "3", "]"}], *)
+(*RowBox[{"-", "0.5582504092645766`"}], "0.014025585325357894`", *)
+(*RowBox[{"-", "39.802289623897146`"}], "1.727208681511886`*^-58"},*)
+(*{*)
+(*RowBox[{"A", "[", "4", "]"}], *)
+(*RowBox[{"-", "0.029836146627802786`"}], "0.0012150137320660471`", *)
+(*RowBox[{"-", "24.55622174497442`"}], "2.0803072628119774`*^-41"},*)
+(*{*)
+(*RowBox[{"\[Mu]", "[", "4", "]"}], "4.933886687869854`", "0.2705468959154913`", "18.236715195619965`", "8.261260399564824`*^-32"},*)
+(*{*)
+(*RowBox[{"\[Sigma]", "[", "4", "]"}], *)
+(*RowBox[{"-", "1.4315050212775577`"}], "0.39576036843061857`", *)
+(*RowBox[{"-", "3.6171004867267738`"}], "0.0004937563720307634`"}*)
+(*},*)
+(*AutoDelete->False,*)
+(*GridBoxAlignment->{"Columns" -> {{Left}}, "ColumnsIndexed" -> {}, "Rows" -> {{Automatic}}, "RowsIndexed" -> {}, "Items" -> {}, "ItemsIndexed" -> {}},*)
+(*GridBoxDividers->{"Columns" -> {}, "ColumnsIndexed" -> {2 -> GrayLevel[0.7]}, "Rows" -> {}, "RowsIndexed" -> {2 -> GrayLevel[0.7]}, "Items" -> {}, "ItemsIndexed" -> {}},*)
+(*GridBoxItemSize->{"Columns" -> {{Automatic}}, "ColumnsIndexed" -> {}, "Rows" -> {{Automatic}}, "RowsIndexed" -> {}, "Items" -> {}, "ItemsIndexed" -> {}},*)
+(*GridBoxSpacings->{"Columns" -> {}, "ColumnsIndexed" -> {2 -> 1}, "Rows" -> {}, "RowsIndexed" -> {2 -> 0.75}, "Items" -> {}, "ItemsIndexed" -> {}}],*)
+(*"Grid"], "DialogStyle",*)
+(*StripOnInput->False]\)*)
+
+
+SummaryPlot[data_,nlm_]:=Module[{bounds={data[[1,1]],Last[data][[1]]}},
+Show@{ListPlot[data,PlotRange->All,ImageSize->Large,PlotStyle->Blue],Plot[nlm[x],{x,bounds[[1]],bounds[[2]]},PlotStyle->{Pink,Thick},PlotRange->All]}
+ListPlot[{data[[All,1]],nlm["FitResiduals"]}\[Transpose],PlotRange->{All,{0,0.01*Max[data\[Transpose][[2]]]}},PlotLabel->"Fit Residuals \[Times] 20",AspectRatio->0.25,ImageSize->Large]
 ]
 
 
