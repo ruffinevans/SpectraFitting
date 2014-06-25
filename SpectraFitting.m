@@ -1,5 +1,12 @@
 (* ::Package:: *)
 
+(* ::Text:: *)
+(*TO DO:*)
+(*	Write peak summary function for fixed peaks to compare ratios. Can do histogram instead of scatter plot.*)
+(*	Add possible constraints to peak fitting*)
+(*	Add better guesses to peak fitting: allow peak suggestion list to be passed instead of just n. Check head to interpret.*)
+
+
 (* ::Section::Closed:: *)
 (*Help Section*)
 
@@ -21,7 +28,7 @@ SpectraHelp[]
 (*Here are a set of tools to fit spectra effectively. For more information, see the readme and example usage files at https://github.com/ruffinevans/SpectraFitting*)
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*File I/O and grooming*)
 
 
@@ -108,7 +115,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -289,11 +296,11 @@ gfn::usage="gfn[A,\[Mu],\[Sigma],x] is a gaussian with prefactor A, mean \[Mu], 
 vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Peak fitting functions*)
 
 
-(* ::Subsubsection::Closed:: *)
+(* ::Subsubsection:: *)
 (*Free peak positions*)
 
 
@@ -313,14 +320,14 @@ FindMinimum[objfunc,Flatten@dataconfig]
 (*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of *)
 
 
-Model[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
+Model[data_,n_,sf_:0.95,cp_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
 	guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
 	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
 		Method -> {NMinimize,
 			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"ScalingFactor" -> sf, "CrossProbability" -> cp,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
 				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
 			}
 		}
@@ -353,7 +360,7 @@ VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 (*This function is similar to model but takes peak positions as given:*)
 
 
-FixedPeaksModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
+FixedPeaksModel[data_,offsets_,sf_:0.95,cp_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
 	dataconfig={A[#],\[Sigma][#]}&/@Range[n];
 	funcparams={A[#],\[Mu]+offsets[[#]],\[Sigma][#]}&/@Range[n];
 	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
@@ -361,7 +368,7 @@ FixedPeaksModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fit
 	NonlinearModelFit[data,modelfunc,{Flatten@{dataconfig,\[Mu]},Flatten@{guess,Mean[data\[Transpose][[1]]]/2}}\[Transpose],fitvar,
 		Method -> {NMinimize,
 			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+				"ScalingFactor" -> sf, "CrossProbability" -> cp,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
 				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
 			}
 		}
@@ -391,17 +398,12 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 (*Summary generation for multipeak fits*)
 
 
-Integrate[gfn[AA/Sqrt[s],u,s,x],{x,-\[Infinity],\[Infinity]}]
-
-
-Integrate[gfn[AA/s,u,s,x],{x,-\[Infinity],\[Infinity]}]
-
-
 (* ::Text:: *)
 (*Summary data from a single fit. Mostly interested in relative weights (scale as A/\[Sigma]) and positions*)
 
 
-FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,bounds={data[[1,1]],Last[data][[1]]}},
+FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,maxcenter,bounds={data[[1,1]],Last[data][[1]]}},
+	Print["Sum of squares of residuals: "<>ToString[FortranForm[nlm["FitResiduals"]^2//Total]]];
 	n=If[fixedpeaks,
 		Last[Most[params]][[1,1]],
 		Last[params][[1,1]]
@@ -414,20 +416,28 @@ FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFit
 		Print[TableForm[Flatten[{{{"Weights","\[Sigma]s"}},datalist},1]]];
 		modelfuncs=gfn[##,fitvar]&@@@(Flatten@{\[Mu],dataconfig});
 	,
-		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]];
+		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]]; (*Total weight should be renormalized by multiplying by standard deviation, because integral of gaussian goes like A^2*\[Sigma] *)
 		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
+		datalist={datalist[[All,1]],datalist[[All,2]],datalist[[All,3]]}\[Transpose];
 		Print[TableForm[Flatten[{{{"Weights","Means","\[Sigma]s"}},datalist},1]]];
 		modelfuncs=gfn[##,fitvar]&@@@dataconfig;
-	]
+	];
 	If[plot,
 		Print@Show@{
 			ListPlot[data,PlotRange->All],
 			Plot[nlm[fitvar],{fitvar,bounds[[1]],bounds[[2]]},PlotRange->All,PlotStyle->{Pink},ImageSize->Medium],
 			Plot[Evaluate@{modelfuncs/.params},{fitvar,bounds[[1]],bounds[[2]]},PlotRange->All,ImageSize->Medium,PlotStyle->({Directive[Dashed,Thick,ColorData["Rainbow"][#]]} & /@Rescale[Range[n]])]};
-		Print@Show@ListPlot[{data[[All,1]],nlm["FitResiduals"]}\[Transpose],PlotRange->{All,{0,0.01*Max[data\[Transpose][[2]]]}},PlotLabel->"Fit Residuals \[Times] 20",AspectRatio->0.25,ImageSize->Medium];
-	]
+		Print@Show@ListPlot[{data[[All,1]],nlm["FitResiduals"]}\[Transpose],PlotRange->All,PlotLabel->"Fit Residuals",AspectRatio->0.25,ImageSize->Medium];
+	];
 	Return[datalist];
 ]
+FitSummary::usage="FitSummary takes in the data from the original fit and the nonlinear model that you fit to this data, and outputs some summary information and plots. Fitsummary returns the table of data it prints out during processing.
+Optional arguments are a boolean fixedpeaks which tells the function whether or not the model was generated with the FixedPeaksModel function.
+The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
+
+
+ComparePeaks[summs_,sheets_]:=ListPlot[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
+ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each spectrum labeled by the last letter in the sheet list, which is typically a unique identifier.";
 
 
 (* ::Text:: *)
