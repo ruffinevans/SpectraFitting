@@ -391,6 +391,12 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 (*Summary generation for multipeak fits*)
 
 
+Integrate[gfn[AA/Sqrt[s],u,s,x],{x,-\[Infinity],\[Infinity]}]
+
+
+Integrate[gfn[AA/s,u,s,x],{x,-\[Infinity],\[Infinity]}]
+
+
 (* ::Text:: *)
 (*Summary data from a single fit. Mostly interested in relative weights (scale as A/\[Sigma]) and positions*)
 
@@ -403,13 +409,13 @@ FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFit
 	If[fixedpeaks,dataconfig={A[#],\[Sigma][#]}&/@Range[n],dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n]];
 	datalistraw=dataconfig/.params;
 	If[fixedpeaks,
-		totalweight=Total@Abs[datalistraw[[All,1]]^2/datalistraw[[All,2]]];
-		datalist={Abs[datalistraw[[All,1]]^2/(totalweight*datalistraw[[All,2]])],datalistraw[[All,2]]}\[Transpose];
+		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]];
+		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
 		Print[TableForm[Flatten[{{{"Weights","\[Sigma]s"}},datalist},1]]];
 		modelfuncs=gfn[##,fitvar]&@@@(Flatten@{\[Mu],dataconfig});
 	,
-		totalweight=Total@Abs[datalistraw[[All,1]]^2/datalistraw[[All,3]]];
-		datalist={Abs[datalistraw[[All,1]]^2/(totalweight*datalistraw[[All,3]])],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
+		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]];
+		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
 		Print[TableForm[Flatten[{{{"Weights","Means","\[Sigma]s"}},datalist},1]]];
 		modelfuncs=gfn[##,fitvar]&@@@dataconfig;
 	]
