@@ -2,9 +2,8 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Write peak summary function for fixed peaks to compare ratios. Can do histogram instead of scatter plot.*)
 (*	Add possible constraints to peak fitting*)
-(*	Add better guesses to peak fitting: allow peak suggestion list to be passed instead of just n. Check head to interpret.*)
+(*	Add better guesses to peak fitting: allow peak suggestion list to be passed instead of just n. Check head to interpret: use ListQ for number vs. peak positions.*)
 
 
 (* ::Section::Closed:: *)
@@ -138,10 +137,8 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 
 
 CoordInit[Spectra_,center_,d_,ypos_:1000]:=Module[{\[Lambda]list},
-\[Lambda]list=If[ChoiceDialog["Do you want to reset the wavelength list?"],
 \[Lambda]list=Table[{center,{center-d/2,center+d/2},center-d/4},{i,1,Length[Spectra]}];
 Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
-]
 ];
 CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (third argument) and the spread in peak positions (third argument) \nThese initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.";
 
@@ -155,10 +152,10 @@ CoordInit::usage="Taking the list of spectra in the first argument, generate a c
 SetAttributes[PickGuesses,HoldRest]
 
 
-PickGuesses[Spectra_,CrdList_]:=Table[
+PickGuesses[Spectra_,CrdList_,DataDir_:" "]:=Table[
 LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
 ListLinePlot[Spectra[[i]],
-PlotRange->{{CrdList[[2,1]],CrdList[[2,2]]},All},ImageSize->Medium,PlotLabel->Import[DataDir][[i]]],Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
+PlotRange->{{CrdList[[2,1]],CrdList[[2,2]]},All},ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]]],Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
 ],
 {i,1,Length[Spectra]}]
 
@@ -411,6 +408,7 @@ FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFit
 	If[fixedpeaks,dataconfig={A[#],\[Sigma][#]}&/@Range[n],dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n]];
 	datalistraw=dataconfig/.params;
 	If[fixedpeaks,
+		Print["Using fixed peaks analysis methods. "<>ToString[Last[params]]];
 		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]];
 		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
 		Print[TableForm[Flatten[{{{"Weights","\[Sigma]s"}},datalist},1]]];
@@ -418,7 +416,7 @@ FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFit
 	,
 		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]]; (*Total weight should be renormalized by multiplying by standard deviation, because integral of gaussian goes like A^2*\[Sigma] *)
 		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
-		datalist={datalist[[All,1]],datalist[[All,2]],datalist[[All,3]]}\[Transpose];
+		datalist={datalist[[All,1]],datalist[[All,2]],datalist[[All,3]]}\[Transpose]; (* Does this line do anything? *)
 		Print[TableForm[Flatten[{{{"Weights","Means","\[Sigma]s"}},datalist},1]]];
 		modelfuncs=gfn[##,fitvar]&@@@dataconfig;
 	];
@@ -436,8 +434,18 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
-ComparePeaks[summs_,sheets_]:=ListPlot[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
-ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each spectrum labeled by the last letter in the sheet list, which is typically a unique identifier.";
+ComparePeaks[summs_,sheets_,peakpositions_:Null,models_:Null]:=If[ListQ[peakpositions],
+	Module[{means=Last[#["BestFitParameters"]][[2]]&/@models,weights=Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,shiftpeakpos,peaklist},
+		shiftpeakpos=Table[peakpositions+means[[i]],{i,1,Length[means]}];
+		weights=Flatten/@weights;
+		peaklist=Table[{shiftpeakpos[[i]],weights[[i]]}\[Transpose],{i,1,Length[means]}];
+		ListPlot[peaklist,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
+	]
+,
+	ListPlot[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
+];
+ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each spectrum labeled by the last symbol in the second argument. Typically, the second argument is the list of sheets, so the last letter is unique.
+In the case of output from the FixedPeaksModel, the peak positions used in the model and the list of models themselves must also be included as arguments (in that order.)";
 
 
 (* ::Text:: *)
