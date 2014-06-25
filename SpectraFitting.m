@@ -2,7 +2,7 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Add possible constraints to peak fitting*)
+(*	Refine ability to fit Voigt profiles*)
 (*	Add better guesses to peak fitting: allow peak suggestion list to be passed instead of just n. Check head to interpret: use ListQ for number vs. peak positions.*)
 
 
@@ -114,7 +114,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -257,7 +257,7 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (*Multipeak spectrum fitting*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*More data grooming*)
 
 
@@ -314,24 +314,35 @@ FindMinimum[objfunc,Flatten@dataconfig]
 
 
 (* ::Text:: *)
-(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of *)
+(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of peaks to fit and returns a nonlinear model. Instead of just a number of peaks, it can optionally take a generic guess which will be used as initial guesses for the peak positions.*)
 
 
-Model[data_,n_,sf_:0.95,cp_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
+Model[data_,nOrParamguess_,sf_:0.95,cp_:0,method_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n},
+	If[ListQ[nOrParamguess],
+		n=Length[nOrParamguess];
+		guess=nOrParamguess; (* Note that this guess does NOT treat the distinction between weights and prefactors seriously, which as-is could cause problems for wildly different sigmas. *)
+		,
+		n=nOrParamguess;
+		guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n] (* Default guess *);
+	];
 	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-	guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
 	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
-		Method -> {NMinimize,
-			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> sf, "CrossProbability" -> cp,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
-				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+		Method -> If[StringQ[method],method,
+			{
+				NMinimize,
+				Method -> {"DifferentialEvolution",
+					"ScalingFactor" -> sf, "CrossProbability" -> cp,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
+					"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
+				}
 			}
-		}
+		]
 	]
 ]
-Model::usage=" Model[data,n] takes in a two-dimensional list data and a desired number of gaussians n and returns a nonlinear model for the data.
-\n This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data.";
+Model::usage="Model[data,n] takes in a two-dimensional list data and a desired number of gaussians n and returns a nonlinear model for the data.
+This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful.
+Instead of a desired number of gaussians, a list of guesses can be passed to the function in the format {{Prefactor 1, Mean 1, \[Sigma] 1}, {Prefactor 2, Mean 2, \[Sigma] 2}, ..., {Prefactor n, Mean n, \[Sigma] n}}. In this case, the function will automatically detect that you're passing it a guess and start fitting around these parameters. In this case, the search space can be reduced by reducing sf.
+A final optional method argument allows";
 
 
 VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
@@ -403,7 +414,7 @@ FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFit
 	Print["Sum of squares of residuals: "<>ToString[FortranForm[nlm["FitResiduals"]^2//Total]]];
 	n=If[fixedpeaks,
 		Last[Most[params]][[1,1]],
-		Last[params][[1,1]]
+		Quiet[Check[Last[params][[1,1]],Print["Error generated in parsing parameters. Did you forget to set the fixedpeaks=True flag? Type ??FitSummary for usage instructions."],Part::partd],Part::partd]
 	];
 	If[fixedpeaks,dataconfig={A[#],\[Sigma][#]}&/@Range[n],dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n]];
 	datalistraw=dataconfig/.params;
