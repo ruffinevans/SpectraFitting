@@ -2,8 +2,11 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Refine ability to fit Voigt profiles*)
-(*	Add better guesses to peak fitting: allow peak suggestion list to be passed instead of just n. Check head to interpret: use ListQ for number vs. peak positions.*)
+(*	Write FitSummary to work with Lorentzians and Voigts.*)
+(*	Test voigt fitting*)
+(*	Add constrained peak fitting*)
+(*	Generalize model to fixedpeaksmodel, or have fixedpeaksmodel call model through constraints.*)
+(*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
 
 
 (* ::Section::Closed:: *)
@@ -294,6 +297,10 @@ lfn[A_,\[Mu]_,\[Sigma]_,x_,c_]:=A^2*(1+((x-\[Mu])/\[Sigma])^2)^-1+c;
 lfn::usage="lfn[A,\[Mu],\[Sigma],x] is a Lorentzian with prefactor A, mean \[Mu], standard deviation \[Sigma], with independent variable x.\ngfn[A,\[Mu],\[Sigma],x,c] is the same plus a constant c.";
 
 
+(* ::Subsubsection:: *)
+(*Voigt peak definitions*)
+
+
 (* ::Text:: *)
 (*Also define Voigt function. Using PDF for normal Voigt distribution is too slow (needs to compute complex error function), so better to use approximation. *)
 
@@ -309,36 +316,37 @@ MixtureDistribution[{1-eta,eta},{NormalDistribution[0,g],CauchyDistribution[0,g]
 ]
 
 
-(PDF@MixtureDistribution[{eta,1-eta},{NormalDistribution[0,g],CauchyDistribution[0,g]}])[x-\[Mu]]//InputForm
+(* ::Text:: *)
+(*Slow voigt function, not exact.*)
 
 
 vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*(PDF@PseudoVoigtDistribution[\[Delta],\[Sigma]])[x-\[Mu]]
 
 
-vfnfast[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=Block[{g=(\[Delta]^5+\[Sigma]^5+2.69296 \[Sigma]^4 \[Delta]+2.42843 \[Sigma]^3 \[Delta]^2+4.47163 \[Sigma]^2 \[Delta]^3+0.07842 \[Sigma] \[Delta]^4)^(1/5),eta},
+(* ::Text:: *)
+(*Fast voigt function with PDF of MixtureDistribution above precomputed. A little less exact for some reason.*)
+
+
+vfnfast[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2 Block[{g=(\[Delta]^5+\[Sigma]^5+2.69296 \[Sigma]^4 \[Delta]+2.42843 \[Sigma]^3 \[Delta]^2+4.47163 \[Sigma]^2 \[Delta]^3+0.07842 \[Sigma] \[Delta]^4)^(1/5),eta},
 eta=\[Delta]/g;
 eta=eta*(1.36603 - 0.47719 eta+0.11116 eta^2);
 eta/(E^((x - \[Mu])^2/(2*g^2))*g*Sqrt[2*Pi]) + (1 - eta)/(g*Pi*(1 + (x - \[Mu])^2/g^2))
 ]
 
 
-Plot[{vfn[1,2,1,0.5,x],vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2]},{x,-10,10},PlotRange->All]
-
-
-Table[vfn[1,2,1,0.5,x],{x,-10,10,10^-3}]//Timing
-
-
-Table[vfnfast[1,2,1,0.5,x],{x,-10,10,10^-3}]//Timing
-
-
-Table[gfn[1,2,1,x],{x,-10,10,10^-3}]//Timing
-
-
 (* ::Text:: *)
-(*See http : // www.casaxps.com/help_manual/line_shapes.htm. This is just a product of a gaussian and a lorentzian*)
+(*Fast CASA XPS version. See http : // www.casaxps.com/help_manual/line_shapes.htm. This is just a product of a gaussian and a lorentzian. Extremely approximate, and normalization is unclear.*)
 
 
 vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
+
+
+(* ::Text:: *)
+(*Compare exact, slow, fast, and CASA XPS versions:*)
+
+
+(* ::Code:: *)
+(*Plot[{vfn[1,2,1,0.5,x],2 vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2],vfnsimp[0.5,2,1,0.5,x]},{x,-10,10},PlotRange->All]*)
 
 
 (* ::Subsection:: *)
@@ -362,20 +370,31 @@ FindMinimum[objfunc,Flatten@dataconfig]
 
 
 (* ::Text:: *)
-(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of peaks to fit and returns a nonlinear model. Instead of just a number of peaks, it can optionally take a generic guess which will be used as initial guesses for the peak positions.*)
+(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely.*)
 
 
-Model[data_,nOrParamguess_,lorentzian_:False,sf_:0.95,cp_:0,method_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n},
+Model[data_,nOrParamguess_,func_:"g",sf_:0.95,cp_:0,method_:0]:=
+Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
+	(* Generate guess *)
 	If[ListQ[nOrParamguess],
 		n=Length[nOrParamguess];
 		guess=nOrParamguess; (* Note that this guess does NOT treat the distinction between weights and prefactors seriously, which as-is could cause problems for wildly different sigmas. *)
 		,
 		n=nOrParamguess;
-		guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n] (* Default guess *);
+		If[func=="v",
+			guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4,0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n],
+			guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n] (* Default guess *)
+		];
 	];
-	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-	modelfunc=If[lorentzian,lfn,gfn][##,fitvar]&@@@dataconfig//Total;
-	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
+	(* Set up variables. Different variables for Voigt vs. Gaussian/Lorentzian *)
+	If[func=="v",
+		dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n];
+		cons={A[#]>0,\[Sigma][#]>0,\[Delta][#]>0}&/@Range[n],
+		dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
+		cons={A[#]>0,\[Sigma][#]>0}&/@Range[n]
+	];
+	modelfunc=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@dataconfig//Total;
+	NonlinearModelFit[data,{modelfunc,cons},{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
 		Method -> If[StringQ[method],method,
 			{
 				NMinimize,
@@ -388,9 +407,13 @@ Model[data_,nOrParamguess_,lorentzian_:False,sf_:0.95,cp_:0,method_:0]:=Module[{
 	]
 ]
 Model::usage="Model[data,n] takes in a two-dimensional list data and a desired number of gaussians n and returns a nonlinear model for the data.
-This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful.
-Instead of a desired number of gaussians, a list of guesses can be passed to the function in the format {{Prefactor 1, Mean 1, \[Sigma] 1}, {Prefactor 2, Mean 2, \[Sigma] 2}, ..., {Prefactor n, Mean n, \[Sigma] n}}. In this case, the function will automatically detect that you're passing it a guess and start fitting around these parameters. In this case, the search space can be reduced by reducing sf.
-A final optional method argument allows";
+This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful. See the usage notes; many other optional parameters must also be specified in this case.
+Instead of a desired number of gaussians, a list of guesses can be passed to the function in the format {{Prefactor 1, Mean 1, \[Sigma] 1}, {Prefactor 2, Mean 2, \[Sigma] 2}, ..., {Prefactor n, Mean n, \[Sigma] n}}. In this case, the function will automatically detect that you're passing it a guess and start fitting around these parameters.
+The next optional parameter is a flag \"g\", \"l\", or \"v\" to pick gaussian, lorentzian, or voigt peaks to fit with.";
+
+
+(* ::Text:: *)
+(*VoightModel is now included in Model and will be removed soon.*)
 
 
 VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
@@ -408,7 +431,7 @@ VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 ]
 
 
-(* ::Subsubsection:: *)
+(* ::Subsubsection::Closed:: *)
 (*Fixed peak positions*)
 
 
@@ -458,26 +481,48 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 (*Summary data from a single fit. Mostly interested in relative weights (scale as A/\[Sigma]) and positions*)
 
 
-FitSummary[data_,nlm_,fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,maxcenter,bounds={data[[1,1]],Last[data][[1]]}},
-	Print["Sum of squares of residuals: "<>ToString[FortranForm[nlm["FitResiduals"]^2//Total]]];
+FitSummary[data_,nlm_,func_:"g",fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,maxcenter,bounds={data[[1,1]],Last[data][[1]]}},
+	Print["Sum of squares of residuals (as percent of total): "<>ToString[FortranForm[Total[nlm["FitResiduals"]^2]/Total[data\[Transpose][[2]]^2]*100]]];
 	n=If[fixedpeaks,
 		Last[Most[params]][[1,1]],
 		Quiet[Check[Last[params][[1,1]],Print["Error generated in parsing parameters. Did you forget to set the fixedpeaks=True flag? Type ??FitSummary for usage instructions."],Part::partd],Part::partd]
 	];
-	If[fixedpeaks,dataconfig={A[#],\[Sigma][#]}&/@Range[n],dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n]];
+	If[fixedpeaks,
+			If[func=="v",
+				dataconfig={A[#],\[Sigma][#],\[Delta][#]}&/@Range[n],
+				dataconfig={A[#],\[Sigma][#]}&/@Range[n]
+			],
+			If[func=="v",
+				dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n],
+				dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n]
+			]
+	];
 	datalistraw=dataconfig/.params;
 	If[fixedpeaks,
 		Print["Using fixed peaks analysis methods. "<>ToString[Last[params]]];
-		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]];
-		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
-		Print[TableForm[Flatten[{{{"Weights","\[Sigma]s"}},datalist},1]]];
-		modelfuncs=gfn[##,fitvar]&@@@(Flatten@{\[Mu],dataconfig});
+		If[func!="v", (* Renormalize gaussians and lorentzians: normally, gaussian is A^2/\[Sigma] Exp[...] and integrates \[Proportional]A^2. Here, we have absorbed 1/\[Sigma] into A^2 in defining the gaussian, so to get something proportional to the integral we need to multiply by \[Sigma] again. The same is true for Lorentzians.*)
+			totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]];
+			datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
+			Print[TableForm[Flatten[{{{"Weight","\[Sigma]"}},datalist},1]]]
+		,
+			(* Not sure what the proper normalization is for Voigt functions. Working on this. *)
+			totalweight=Total@Abs[datalistraw[[All,1]]^2];
+			datalist={Abs[datalistraw[[All,1]]^2/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
+			Print[TableForm[Flatten[{{{"A","\[Sigma]","\[Delta]"}},datalist},1]]]
+		];
+		modelfuncs=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@(Flatten@{\[Mu],dataconfig});
 	,
-		totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]]; (*Total weight should be renormalized by multiplying by standard deviation, because integral of gaussian goes like A^2*\[Sigma] *)
-		datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
-		datalist={datalist[[All,1]],datalist[[All,2]],datalist[[All,3]]}\[Transpose]; (* Does this line do anything? *)
-		Print[TableForm[Flatten[{{{"Weights","Means","\[Sigma]s"}},datalist},1]]];
-		modelfuncs=gfn[##,fitvar]&@@@dataconfig;
+		If[func!="v", (* Renormalize gaussians and lorentzians: normally, gaussian is A^2/\[Sigma] Exp[...] and integrates \[Proportional]A^2. Here, we have absorbed 1/\[Sigma] into A^2 in defining the gaussian, so to get something proportional to the integral we need to multiply by \[Sigma] again. The same is true for Lorentzians.*)
+			totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]];
+			datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
+			Print[TableForm[Flatten[{{{"Weight","\[Mu]","\[Sigma]"}},datalist},1]]];
+		,
+			(* Not sure what the proper normalization is for Voigt functions. Working on this. *)
+			totalweight=Total@Abs[datalistraw[[All,1]]^2];
+			datalist={Abs[datalistraw[[All,1]]^2/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]],datalistraw[[All,4]]}\[Transpose];
+			Print[TableForm[Flatten[{{{"A","\[Mu]","\[Sigma]","\[Delta]"}},datalist},1]]];
+		];
+		modelfuncs=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@dataconfig;
 	];
 	If[plot,
 		Print@Show@{
