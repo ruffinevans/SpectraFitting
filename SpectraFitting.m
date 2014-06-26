@@ -114,7 +114,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -199,16 +199,14 @@ UserRemoveAve::usage="Removes the user-selected average position in CrdList from
 
 
 SingleLorentzianFit[Spectra_,CrdList_]:=Module[{zoomed=UserRemoveAve[Spectra,CrdList],wavelist=(ToWaveEl/@CrdList)},
-Table[
-Print["Fitting "<>ToString[i]<>" out of "<>ToString[Length[Spectra]]];
-NonlinearModelFit[zoomed[[i]],{A (1+((x-x0)/\[Gamma])^2)^-1,A>0,x0>wavelist[[i,2,1]],
-x0<wavelist[[i,2,2]],
-\[Gamma]<10},
-{A,\[Gamma],x0},x,
-Method->{NMinimize,Method->{"DifferentialEvolution","ScalingFactor"->0.9,"CrossProbability"->0.1,"PostProcess"->{FindMinimum,Method->"QuasiNewton"}}}
-],
-{i,1,Length[Spectra]}
-]
+	Table[
+		Print["Fitting "<>ToString[i]<>" out of "<>ToString[Length[Spectra]]];
+		NonlinearModelFit[zoomed[[i]],{A (1+((x-x0)/\[Gamma])^2)^-1,A>0,x0>wavelist[[i,2,1]],
+			x0<wavelist[[i,2,2]], \[Gamma]<10},{A,\[Gamma],x0},x,
+			Method->{NMinimize,Method->{"DifferentialEvolution","ScalingFactor"->0.9,"CrossProbability"->0.1,"PostProcess"->{FindMinimum,Method->"QuasiNewton"}}}
+		],
+		{i,1,Length[Spectra]}
+	]
 ];
 SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models.";
 
@@ -235,20 +233,21 @@ TraditionalForm]\)/\[CapitalDelta]\[Omega] where \[CapitalDelta]\[Omega] is 2\[G
 
 ShowFits[Spectra_,CrdList_,Fits_,Path_]:=
 Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
-Table[
-Print[
-{ToString[DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]]]<>
-", \!\(\*SubscriptBox[\(\[Lambda]\), \(center\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[3,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[2]]]<>
-", \!\(\*SubscriptBox[\(\[Gamma]\), \(FWHM\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[2,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[3]]]<>
-", Q="<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]]]<>"\[PlusMinus]"<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]],
-Show[
-Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
-ListLinePlot[Spectra[[i]],PlotRange->All,PlotStyle->Larger]],
-Show[
-Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
-ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]}
-]
-,{i,1,Length[Fits]}]
+	Table[
+		Print[
+			{ToString[DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]]]<>
+			", \!\(\*SubscriptBox[\(\[Lambda]\), \(center\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[3,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[2]]]<>
+			", \!\(\*SubscriptBox[\(\[Gamma]\), \(FWHM\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[2,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[3]]]<>
+			", Q="<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]]]<>"\[PlusMinus]"<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]],
+			Show[
+				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
+				ListLinePlot[Spectra[[i]],PlotRange->All,PlotStyle->Larger]],
+			Show[
+				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
+				ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]
+			}
+		]
+	,{i,1,Length[Fits]}]
 ]
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
 
@@ -257,7 +256,7 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (*Multipeak spectrum fitting*)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*More data grooming*)
 
 
@@ -287,10 +286,59 @@ gfn::usage="gfn[A,\[Mu],\[Sigma],x] is a gaussian with prefactor A, mean \[Mu], 
 
 
 (* ::Text:: *)
-(*Also define Voigt function. Using PDF is too slow (needs to compute complex error function), so better to use approximation. See http://www.casaxps.com/help_manual/line_shapes.htm. This is just a product of a gaussian and a lorentzian*)
+(*Define a lorentzian:*)
 
 
-vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
+lfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*(1+((x-\[Mu])/\[Sigma])^2)^-1;
+lfn[A_,\[Mu]_,\[Sigma]_,x_,c_]:=A^2*(1+((x-\[Mu])/\[Sigma])^2)^-1+c;
+lfn::usage="lfn[A,\[Mu],\[Sigma],x] is a Lorentzian with prefactor A, mean \[Mu], standard deviation \[Sigma], with independent variable x.\ngfn[A,\[Mu],\[Sigma],x,c] is the same plus a constant c.";
+
+
+(* ::Text:: *)
+(*Also define Voigt function. Using PDF for normal Voigt distribution is too slow (needs to compute complex error function), so better to use approximation. *)
+
+
+(* ::Text:: *)
+(*Here is a reasonably fast Voigt distribution from the Mathematica VoigtDistribution help page.*)
+
+
+PseudoVoigtDistribution[de_,si_]:=Block[{g=(de^5+si^5+2.69296 si^4 de+2.42843 si^3 de^2+4.47163 si^2 de^3+0.07842 si de^4)^(1/5),eta},
+eta=de/g;
+eta=eta*(1.36603 - 0.47719 eta+0.11116 eta^2);
+MixtureDistribution[{1-eta,eta},{NormalDistribution[0,g],CauchyDistribution[0,g]}]
+]
+
+
+(PDF@MixtureDistribution[{eta,1-eta},{NormalDistribution[0,g],CauchyDistribution[0,g]}])[x-\[Mu]]//InputForm
+
+
+vfn[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*(PDF@PseudoVoigtDistribution[\[Delta],\[Sigma]])[x-\[Mu]]
+
+
+vfnfast[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=Block[{g=(\[Delta]^5+\[Sigma]^5+2.69296 \[Sigma]^4 \[Delta]+2.42843 \[Sigma]^3 \[Delta]^2+4.47163 \[Sigma]^2 \[Delta]^3+0.07842 \[Sigma] \[Delta]^4)^(1/5),eta},
+eta=\[Delta]/g;
+eta=eta*(1.36603 - 0.47719 eta+0.11116 eta^2);
+eta/(E^((x - \[Mu])^2/(2*g^2))*g*Sqrt[2*Pi]) + (1 - eta)/(g*Pi*(1 + (x - \[Mu])^2/g^2))
+]
+
+
+Plot[{vfn[1,2,1,0.5,x],vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2]},{x,-10,10},PlotRange->All]
+
+
+Table[vfn[1,2,1,0.5,x],{x,-10,10,10^-3}]//Timing
+
+
+Table[vfnfast[1,2,1,0.5,x],{x,-10,10,10^-3}]//Timing
+
+
+Table[gfn[1,2,1,x],{x,-10,10,10^-3}]//Timing
+
+
+(* ::Text:: *)
+(*See http : // www.casaxps.com/help_manual/line_shapes.htm. This is just a product of a gaussian and a lorentzian*)
+
+
+vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[Mu])^2/\[Sigma]^2]/(1+4\[Delta]*(x-\[Mu])^2/\[Sigma]^2)
 
 
 (* ::Subsection:: *)
@@ -317,7 +365,7 @@ FindMinimum[objfunc,Flatten@dataconfig]
 (*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It takes in the data and the number of peaks to fit and returns a nonlinear model. Instead of just a number of peaks, it can optionally take a generic guess which will be used as initial guesses for the peak positions.*)
 
 
-Model[data_,nOrParamguess_,sf_:0.95,cp_:0,method_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n},
+Model[data_,nOrParamguess_,lorentzian_:False,sf_:0.95,cp_:0,method_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n},
 	If[ListQ[nOrParamguess],
 		n=Length[nOrParamguess];
 		guess=nOrParamguess; (* Note that this guess does NOT treat the distinction between weights and prefactors seriously, which as-is could cause problems for wildly different sigmas. *)
@@ -326,7 +374,7 @@ Model[data_,nOrParamguess_,sf_:0.95,cp_:0,method_:0]:=Module[{dataconfig,modelfu
 		guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n] (* Default guess *);
 	];
 	dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-	modelfunc=gfn[##,fitvar]&@@@dataconfig//Total;
+	modelfunc=If[lorentzian,lfn,gfn][##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
 		Method -> If[StringQ[method],method,
 			{
