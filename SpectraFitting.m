@@ -2,8 +2,6 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Write FitSummary to work with Lorentzians and Voigts.*)
-(*	Test voigt fitting*)
 (*	Add constrained peak fitting*)
 (*	Generalize model to fixedpeaksmodel, or have fixedpeaksmodel call model through constraints.*)
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
@@ -155,14 +153,16 @@ CoordInit::usage="Taking the list of spectra in the first argument, generate a c
 SetAttributes[PickGuesses,HoldRest]
 
 
-PickGuesses[Spectra_,CrdList_,DataDir_:" "]:=Table[
-LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
-ListLinePlot[Spectra[[i]],
-PlotRange->{{CrdList[[2,1]],CrdList[[2,2]]},All},ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]]],Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
-],
+PickGuesses[Spectra_,CrdList_,DataDir_:" "]:=Module[{CrdListTemp=CrdList},
+Table[
+	LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
+		ListLinePlot[Spectra[[i]],
+			ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]],PlotRange->All(* Doesn't work because of evaluation procedure? PlotRange->{{CrdListTemp[[2,1]],CrdListTemp[[2,2]]},All}*)
+		]
+		,Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
+	],
 {i,1,Length[Spectra]}]
-
-
+]
 PickGuesses::usage="This function allows the user to interactively select guesses for parameters that will be used later for various curve fitting routines.\n
 The inputs are first the list of spectra and second the coordinate list in the format described by the CoordInit command (see the usage notes there). Note that this coordinate list should be named as a variable and not passed implicitly as the output of the CoordInit function. This is required to handle the dynamic evaluation necessary for interactive user selection of the points.\n
 This function will generate a list of zoomed-in plots with markers that the user can drag to the desired positions for peak fitting.";
@@ -345,7 +345,6 @@ vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[M
 (*Compare exact, slow, fast, and CASA XPS versions:*)
 
 
-(* ::Code:: *)
 (*Plot[{vfn[1,2,1,0.5,x],2 vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2],vfnsimp[0.5,2,1,0.5,x]},{x,-10,10},PlotRange->All]*)
 
 
@@ -375,6 +374,7 @@ FindMinimum[objfunc,Flatten@dataconfig]
 
 Model[data_,nOrParamguess_,func_:"g",sf_:0.95,cp_:0,method_:0]:=
 Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
+	If[func=="v",PrintTemporary["Voigt functions selected. Lowering ScalingFactor (to around 0.5) is recommended.\nAlso, please ignore any errors passed by NMinimize."]];
 	(* Generate guess *)
 	If[ListQ[nOrParamguess],
 		n=Length[nOrParamguess];
@@ -391,11 +391,11 @@ Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
 		dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n];
 		cons={A[#]>0,\[Sigma][#]>0,\[Delta][#]>0}&/@Range[n],
 		dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-		cons={A[#]>0,\[Sigma][#]>0}&/@Range[n]
+		cons={}&/@Range[n] (* For some reason, fit works better without constraints. *)
 	];
 	modelfunc=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,{modelfunc,cons},{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
-		Method -> If[StringQ[method],method,
+		 If[method!=0,method,Method->
 			{
 				NMinimize,
 				Method -> {"DifferentialEvolution",
@@ -407,7 +407,7 @@ Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
 	]
 ]
 Model::usage="Model[data,n] takes in a two-dimensional list data and a desired number of gaussians n and returns a nonlinear model for the data.
-This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful. See the usage notes; many other optional parameters must also be specified in this case.
+This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful. See the complete argument list (type ??Model); many other optional parameters must also be specified in this case.
 Instead of a desired number of gaussians, a list of guesses can be passed to the function in the format {{Prefactor 1, Mean 1, \[Sigma] 1}, {Prefactor 2, Mean 2, \[Sigma] 2}, ..., {Prefactor n, Mean n, \[Sigma] n}}. In this case, the function will automatically detect that you're passing it a guess and start fitting around these parameters.
 The next optional parameter is a flag \"g\", \"l\", or \"v\" to pick gaussian, lorentzian, or voigt peaks to fit with.";
 
@@ -500,7 +500,7 @@ FitSummary[data_,nlm_,func_:"g",fixedpeaks_:False,plot_:True]:=Module[{params=nl
 	datalistraw=dataconfig/.params;
 	If[fixedpeaks,
 		Print["Using fixed peaks analysis methods. "<>ToString[Last[params]]];
-		If[func!="v", (* Renormalize gaussians and lorentzians: normally, gaussian is A^2/\[Sigma] Exp[...] and integrates \[Proportional]A^2. Here, we have absorbed 1/\[Sigma] into A^2 in defining the gaussian, so to get something proportional to the integral we need to multiply by \[Sigma] again. The same is true for Lorentzians.*)
+		If[func!="v", (* Renormalize gaussians and lorentzians: normally, gaussian is A^2/\[Sigma] Exp[...] and integrates \[Proportional]A^2. Here, we have absorbed 1/\[Sigma] into A^2 in defining the gaussian, so A^2 is really A^2/\[Sigma]. So, to get something proportional to the integral (A^2) we need to multiply by \[Sigma] again. The same is true for Lorentzians.*)
 			totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]];
 			datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
 			Print[TableForm[Flatten[{{{"Weight","\[Sigma]"}},datalist},1]]]
@@ -512,7 +512,7 @@ FitSummary[data_,nlm_,func_:"g",fixedpeaks_:False,plot_:True]:=Module[{params=nl
 		];
 		modelfuncs=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@(Flatten@{\[Mu],dataconfig});
 	,
-		If[func!="v", (* Renormalize gaussians and lorentzians: normally, gaussian is A^2/\[Sigma] Exp[...] and integrates \[Proportional]A^2. Here, we have absorbed 1/\[Sigma] into A^2 in defining the gaussian, so to get something proportional to the integral we need to multiply by \[Sigma] again. The same is true for Lorentzians.*)
+		If[func!="v",
 			totalweight=Total@Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]];
 			datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,3]]/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
 			Print[TableForm[Flatten[{{{"Weight","\[Mu]","\[Sigma]"}},datalist},1]]];
@@ -538,15 +538,20 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
+ClearAll@ComparePeaks
+
+
 ComparePeaks[summs_,sheets_,peakpositions_:Null,models_:Null]:=If[ListQ[peakpositions],
 	Module[{means=Last[#["BestFitParameters"]][[2]]&/@models,weights=Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,shiftpeakpos,peaklist},
 		shiftpeakpos=Table[peakpositions+means[[i]],{i,1,Length[means]}];
 		weights=Flatten/@weights;
 		peaklist=Table[{shiftpeakpos[[i]],weights[[i]]}\[Transpose],{i,1,Length[means]}];
-		ListPlot[peaklist,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
+		Print[ListPlot[peaklist,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]];
+		Return[peaklist];
 	]
 ,
-	ListPlot[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]
+	Print[ListPlot[Reverse[#\[Transpose][[{1,2}]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]]
+	Return[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs];
 ];
 ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each spectrum labeled by the last symbol in the second argument. Typically, the second argument is the list of sheets, so the last letter is unique.
 In the case of output from the FixedPeaksModel, the peak positions used in the model and the list of models themselves must also be included as arguments (in that order.)";
