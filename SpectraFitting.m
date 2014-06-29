@@ -157,7 +157,8 @@ PickGuesses[Spectra_,CrdList_,DataDir_:" "]:=Module[{CrdListTemp=CrdList},
 Table[
 	LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
 		ListLinePlot[Spectra[[i]],
-			ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]],PlotRange->All(* Doesn't work because of evaluation procedure? PlotRange->{{CrdListTemp[[2,1]],CrdListTemp[[2,2]]},All}*)
+			ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]],
+			PlotRange->{{CrdListTemp[[i]]\[Transpose][[1,2]],CrdListTemp[[i]]\[Transpose][[1,3]]},All}
 		]
 		,Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
 	],
