@@ -551,8 +551,8 @@ ComparePeaks[summs_,sheets_,peakpositions_:Null,models_:Null]:=If[ListQ[peakposi
 		Return[peaklist];
 	]
 ,
-	Print[ListPlot[Reverse[#\[Transpose][[{1,2}]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]]
-	Return[Reverse[Most[#\[Transpose]]]\[Transpose]&/@summs];
+	Print[ListPlot[Reverse[#\[Transpose][[{1,2}]]]\[Transpose]&/@summs,PlotRange->All,PlotMarkers->(StringTake[#,-1]&/@sheets)]];
+	Return[Reverse[#\[Transpose][[{1,2}]]]\[Transpose]&/@summs];
 ];
 ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each spectrum labeled by the last symbol in the second argument. Typically, the second argument is the list of sheets, so the last letter is unique.
 In the case of output from the FixedPeaksModel, the peak positions used in the model and the list of models themselves must also be included as arguments (in that order.)";
