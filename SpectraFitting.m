@@ -195,7 +195,7 @@ Table[
 {cb[[i]]\[Transpose][[1]],cb[[i]]\[Transpose][[2]]-Interpolation[Spectra[[i]],(ToWaveEl/@CrdList)[[i,3]]]}\[Transpose]
 ,{i,1,Length[cb]}]//Return;
 ]
-UserRemoveAve::usage="Removes the user-selected average position in CrdList from Spectra to aid fitting.";
+UserRemoveAve::usage="Removes the user-selected average position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
 
 
 (* ::Text:: *)
