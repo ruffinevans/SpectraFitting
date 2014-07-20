@@ -5,6 +5,7 @@
 (*	Add constrained peak fitting*)
 (*	Generalize model to fixedpeaksmodel, or have fixedpeaksmodel call model through constraints.*)
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
+(*	Solve normalization problem definitively*)
 
 
 (* ::Section::Closed:: *)
@@ -58,15 +59,15 @@ ProcessXPSSpectra::usage="Takes in a list of imported sheets from excel files an
 (*Import Spectrum from File. Assume CSV but allow for other options.*)
 
 
-GetSpec[path_,format_:"csv",xpsfilter_:"Scan"]:=If[format!="Excel XPS",QuickDD[Import[path,format]],
+GetSpec[path_,format_:"csv",xpsfilter_:"Scan",verbose_:True]:=If[format!="Excel XPS",QuickDD[Import[path,format]],
 	Module[{specsout,sheets=Import[path,"Sheets"],keepsheets},
-		Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""];
+		If[verbose,Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""]];
 		keepsheets=Flatten[Position[sheets,_?(StringMatchQ[ToString[#],___~~xpsfilter~~___]&)]]//Quiet;
-		Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."];
-		Print[Part[sheets,keepsheets]];
-		Print[ToString[Length[keepsheets]]<>" spectra in all."];
-		specsout=Table[Print["Importing Sheet "<>ToString[sheets[[i]]]]; Import[path,{"xlsx","Data",i}],{i,keepsheets}];
-		Print["Formatting XPS Spectra"];
+		If[verbose,Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."]];
+		If[verbose,Print[Part[sheets,keepsheets]]];
+		If[verbose,Print[ToString[Length[keepsheets]]<>" spectra in all."]];
+		specsout=Table[If[verbose,Print["Importing Sheet "<>ToString[sheets[[i]]]]]; Import[path,{"xlsx","Data",i}],{i,keepsheets}];
+		If[verbose,Print["Formatting XPS Spectra"]];
 		Return[ProcessXPSSpectra[specsout]];
 	]
 ]
@@ -81,15 +82,15 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 (*Function to return the list of sheets:*)
 
 
-GetSheets[path_,xpsfilter_:"Scan"]:=
+GetSheets[path_,xpsfilter_:"Scan",verbose_:True]:=
 Module[{specsout,sheets=Import[path,"Sheets"],keepsheets},
-	Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""];
+	If[verbose,Print["Removing sheets that do not contain the string \""<>xpsfilter<>"\""]];
 	keepsheets=Flatten[Position[sheets,_?(StringMatchQ[ToString[#],___~~xpsfilter~~___]&)]]//Quiet;
-	Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."];
-	Print[ToString[Length[keepsheets]]<>" spectra in all."];
+	If[verbose,Print["Here is a list of sheets that are being kept. The order of the original Excel file is being preserved."]];
+	If[verbose,Print[ToString[Length[keepsheets]]<>" spectra in all."]];
 	Return[Part[sheets,keepsheets]];
 ]
-GetSheets[path_]:=GetSheets[path,"Scan"];
+GetSheets[path_]:=GetSheets[path,"Scan",True];
 GetSheets::usage="Imports a simple spectrum from a text file or a properly formatted set of XPS files from an excel file.
 In the first case, the function assumes a standard {energy, amplitude} formatting like a csv file and does no grooming. If the file is organized in essentially the same way but is formatted differently, an optional segcond argument can be included that is passed directly to the Mathematica \"Import[]\" function as a format string. See the usage notes for that function. Sometimes \"Table\" is a useful choice for this argument.
 If you want to import an Excel file that has been formatted by the Advantage XPS program, put \"Excel XPS\" in the second argument. In this case, the function will return a list of XPS spectra with the headers removed so that the data can be convenienty manipulated. By default the sheets in the excel file that do not have XPS data will be discarded. If you want to keep only certain sheets, the optional third argument will keep all shets matching a particular string. Put in an empty string \"\" to match all sheets. For example, you can use \"O1s\" to only take oxygen data.";
@@ -115,7 +116,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -284,7 +285,7 @@ CenterAndNormalize::usage="Takes two-dimensional data and recenters it around th
 (*First, define a Gaussian*)
 
 
-gfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]
+gfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2/\[Sigma]*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]
 gfn[A_,\[Mu]_,\[Sigma]_,x_,c_]:=A^2*Exp[-((x-\[Mu])^2/(2\[Sigma]^2))]+c
 gfn::usage="gfn[A,\[Mu],\[Sigma],x] is a gaussian with prefactor A, mean \[Mu], standard deviation \[Sigma], with independent variable x.\ngfn[A,\[Mu],\[Sigma],x,c] is the same plus a constant c.";
 
@@ -373,8 +374,8 @@ FindMinimum[objfunc,Flatten@dataconfig]
 (*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely.*)
 
 
-Model[data_,nOrParamguess_,func_:"g",sf_:0.95,cp_:0,method_:0]:=
-Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
+Model[data_,nOrParamguess_,bounds_:{},func_:"g",sf_:0.95,cp_:0,method_:0]:=
+Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons,tempbounds=bounds},
 	If[func=="v",PrintTemporary["Voigt functions selected. Lowering ScalingFactor (to around 0.5) is recommended.\nAlso, please ignore any errors passed by NMinimize."]];
 	(* Generate guess *)
 	If[ListQ[nOrParamguess],
@@ -382,6 +383,7 @@ Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
 		guess=nOrParamguess; (* Note that this guess does NOT treat the distinction between weights and prefactors seriously, which as-is could cause problems for wildly different sigmas. *)
 		,
 		n=nOrParamguess;
+		If[bounds!={},Print["Must specify parameter guesses if you want to use bounds/constraints!"];tempbounds={};]
 		If[func=="v",
 			guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4,0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n],
 			guess={0#+Mean[data\[Transpose][[2]]],MaxPos[data],0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n] (* Default guess *)
@@ -390,13 +392,27 @@ Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
 	(* Set up variables. Different variables for Voigt vs. Gaussian/Lorentzian *)
 	If[func=="v",
 		dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n];
-		cons={A[#]>0,\[Sigma][#]>0,\[Delta][#]>0}&/@Range[n],
+		If[tempbounds=={},
+			cons={A[#]>0,\[Sigma][#]>0,\[Delta][#]>0}&/@Range[n]
+		,
+			cons={nOrParamguess[[#,1]]*(1+tempbounds[[1]])>A[#]>nOrParamguess[[#,1]]*(1-tempbounds[[1]]),
+					nOrParamguess[[#,2]]+tempbounds[[2]]>\[Mu][#]>nOrParamguess[[#,2]]-tempbounds[[2]],
+					nOrParamguess[[#,3]]*(1+tempbounds[[3]])>\[Sigma][#]>nOrParamguess[[#,3]]*(1-tempbounds[[3]]),
+					nOrParamguess[[#,4]]*(1+tempbounds[[4]])>\[Delta][#]>nOrParamguess[[#,4]]*(1-tempbounds[[4]])}&/@Range[n]
+		]
+	,
 		dataconfig={A[#],\[Mu][#],\[Sigma][#]}&/@Range[n];
-		cons={}&/@Range[n] (* For some reason, fit works better without constraints. *)
+		If[tempbounds=={},
+			cons={}&/@Range[n] (* For some reason, fit works better without constraints. *)
+		,
+					cons={nOrParamguess[[#,1]]*(1+tempbounds[[1]])>A[#]>nOrParamguess[[#,1]]*(1-tempbounds[[1]]),
+						nOrParamguess[[#,2]]+tempbounds[[2]]>\[Mu][#]>nOrParamguess[[#,2]]-tempbounds[[2]],
+						nOrParamguess[[#,3]]*(1+tempbounds[[3]])>\[Sigma][#]>nOrParamguess[[#,3]]*(1-tempbounds[[3]])}&/@Range[n]
+		]
 	];
 	modelfunc=Switch[func,"l",lfn,"v",vfnfast,"g",gfn][##,fitvar]&@@@dataconfig//Total;
 	NonlinearModelFit[data,{modelfunc,cons},{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
-		 If[method!=0,method,Method->
+		 If[method!=0,ToExpression[method],Method->
 			{
 				NMinimize,
 				Method -> {"DifferentialEvolution",
@@ -410,11 +426,12 @@ Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n,cons},
 Model::usage="Model[data,n] takes in a two-dimensional list data and a desired number of gaussians n and returns a nonlinear model for the data.
 This is a difficult thing to do in general, so the function is tuned to fit the sort of data we usually get from the XPS. It works best if CenterAndNormalize has first been applied to the data. Sometimes additional tuning in the form of two optional arguments (the Scaling Factor sf and the Crossing Probability cp) can be helpful. See the complete argument list (type ??Model); many other optional parameters must also be specified in this case.
 Instead of a desired number of gaussians, a list of guesses can be passed to the function in the format {{Prefactor 1, Mean 1, \[Sigma] 1}, {Prefactor 2, Mean 2, \[Sigma] 2}, ..., {Prefactor n, Mean n, \[Sigma] n}}. In this case, the function will automatically detect that you're passing it a guess and start fitting around these parameters.
+The third optional parameter is a three-argument list of bounds that gives the fractional variation to allow in each of the prefactors, means, and widths. 
 The next optional parameter is a flag \"g\", \"l\", or \"v\" to pick gaussian, lorentzian, or voigt peaks to fit with.";
 
 
 (* ::Text:: *)
-(*VoightModel is now included in Model and will be removed soon.*)
+(*VoightModel is now included in Model, but it is included for now for backwards compatability. It should be removed with the next release.*)
 
 
 VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
@@ -432,12 +449,12 @@ VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
 ]
 
 
-(* ::Subsubsection::Closed:: *)
+(* ::Subsubsection:: *)
 (*Fixed peak positions*)
 
 
 (* ::Text:: *)
-(*This function is similar to model but takes peak positions as given:*)
+(*This function is similar to model but takes peak positions as given. Note that it is just a special case of the above with perfect constraints on the peak positions. Once I compare the two functions to each other, I can get rid of this function.*)
 
 
 FixedPeaksModel[data_,offsets_,sf_:0.95,cp_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
