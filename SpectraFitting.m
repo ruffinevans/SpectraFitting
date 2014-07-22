@@ -2,13 +2,13 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Add constrained peak fitting*)
 (*	Generalize model to fixedpeaksmodel, or have fixedpeaksmodel call model through constraints.*)
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
 (*	Solve normalization problem definitively*)
+(*	More intelligent background subtraction*)
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Help Section*)
 
 
@@ -116,7 +116,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -139,10 +139,10 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 
 
 CoordInit[Spectra_,center_,d_,ypos_:1000]:=Module[{\[Lambda]list},
-\[Lambda]list=Table[{center,{center-d/2,center+d/2},center-d/4},{i,1,Length[Spectra]}];
+\[Lambda]list=Table[{center,{center-d/2,center+d/2},center-3d/8},{i,1,Length[Spectra]}];
 Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
 ];
-CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (third argument) and the spread in peak positions (third argument) \nThese initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.";
+CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (second argument) and the spread in peak positions (third argument) \nThese initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.";
 
 
 (* ::Text:: *)
@@ -257,7 +257,7 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Multipeak spectrum fitting*)
 
 
