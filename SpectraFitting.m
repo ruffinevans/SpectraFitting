@@ -6,6 +6,7 @@
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
 (*	Solve normalization problem definitively*)
 (*	More intelligent background subtraction*)
+(*	Residuals does not give satisfying answer. Make sure it is not subtracting negative values.*)
 
 
 (* ::Section:: *)
