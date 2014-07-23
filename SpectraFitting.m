@@ -117,7 +117,7 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Simple Spectra Manipulation and Fitting*)
 
 
@@ -258,7 +258,7 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Multipeak spectrum fitting*)
 
 
@@ -270,16 +270,16 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (*Useful function to find x-coordinate corresponding to maximum y-coordinate.*)
 
 
-MaxPos[data_]:=#[[Position[#,Max[#\[Transpose][[2]]]][[1,1]]]][[1]]&[data];
-MaxPos::usage="Gives the x-coordinate corresponding to the maximum y-coordinate, such that data[[MaxPos[data]]] returns the maximum y-value of the list data.";
+MaxPos[data_,filter_:(1*#&)]:=#[[Position[#,Max[#\[Transpose][[2]]]][[1,1]]]][[1]]&[filter[data]];
+MaxPos::usage="Gives the x-coordinate corresponding to the maximum y-coordinate, such that data[[MaxPos[data]]] returns the maximum y-value of the list data. The optional filter agument will apply the function filter to the data before finding the maximum position. ";
 
 
 (* ::Text:: *)
 (*Center data around peak value and renormalize by sum:*)
 
 
-CenterAndNormalize[data_]:=SortBy[{data\[Transpose][[1]]-MaxPos[data],data\[Transpose][[2]]/Total[data\[Transpose][[2]]]}\[Transpose],First]
-CenterAndNormalize::usage="Takes two-dimensional data and recenters it around the maximum y-value. This is often helpful for numerical routines to fit the data. It also renormalizes the data so that it integrates to one.";
+CenterAndNormalize[data_,filter_:(1*#&)]:=SortBy[{data\[Transpose][[1]]-MaxPos[data,filter],data\[Transpose][[2]]/Total[data\[Transpose][[2]]]}\[Transpose],First]
+CenterAndNormalize::usage="Takes two-dimensional data and recenters it around the maximum y-value. This is often helpful for numerical routines to fit the data. It also renormalizes the data so that it integrates to one. The optional filter agument will apply the function filter to the data before finding the maximum position.";
 
 
 (* ::Text:: *)
@@ -432,22 +432,7 @@ The next optional parameter is a flag \"g\", \"l\", or \"v\" to pick gaussian, l
 
 
 (* ::Text:: *)
-(*VoightModel is now included in Model, but it is included for now for backwards compatability. It should be removed with the next release.*)
-
-
-VoigtModel[data_,n_]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess},
-	dataconfig={A[#],\[Mu][#],\[Sigma][#],\[Delta][#]}&/@Range[n];
-	guess={0#+Mean[data\[Transpose][[2]]],0#+Mean[data\[Transpose][[1]]],0#+Mean[data\[Transpose][[1]]]/4,0#+Mean[data\[Transpose][[1]]]/4}&/@Range[n];
-	modelfunc=vfn[##,fitvar]&@@@dataconfig//Total;
-	NonlinearModelFit[data,modelfunc,{Flatten@dataconfig,Flatten@guess}\[Transpose],fitvar,
-		Method -> {NMinimize,
-			Method -> {"DifferentialEvolution",
-				"ScalingFactor" -> 0.95, "CrossProbability" -> 0,(*Tuned for good gaussian fitting. In particular, CrossProbability should be low. See e.g. http://mathematica.stackexchange.com/questions/2309/problem-with-nonlinearmodelfit*)
-				"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}
-			}
-		}
-	]
-]
+(*VoightModel has been removed since it is encompassed in Model.*)
 
 
 (* ::Subsubsection:: *)
