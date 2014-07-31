@@ -486,7 +486,7 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 
 
 FitSummary[data_,nlm_,func_:"g",fixedpeaks_:False,plot_:True]:=Module[{params=nlm["BestFitParameters"],dataconfig,modelfuncs,fitvar,n,datalistraw,datalist,totalweight,maxcenter,bounds={data[[1,1]],Last[data][[1]]}},
-	Print["Sum of squares of residuals (as percent of total): "<>ToString[FortranForm[Total[nlm["FitResiduals"]^2]/Total[data\[Transpose][[2]]^2]*100]]];
+	Print["RMS residuals (as percent of total): "<>ToString[FortranForm[Sqrt[Total[nlm["FitResiduals"]^2]/Total[data\[Transpose][[2]]^2]]*100]]];
 	n=If[fixedpeaks,
 		Last[Most[params]][[1,1]],
 		Quiet[Check[Last[params][[1,1]],Print["Error generated in parsing parameters. Did you forget to set the fixedpeaks=True flag? Type ??FitSummary for usage instructions."],Part::partd],Part::partd]
