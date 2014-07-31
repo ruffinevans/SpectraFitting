@@ -542,6 +542,9 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
+FitScore[fitlist_,data_]:=Mean[Sqrt[Total[#["FitResiduals"]^2]/Total[data\[Transpose][[2]]^2]]&/@fitlist]
+
+
 ClearAll@ComparePeaks
 
 
