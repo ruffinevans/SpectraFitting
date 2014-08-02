@@ -200,7 +200,7 @@ Table[
 {cb[[i]]\[Transpose][[1]],cb[[i]]\[Transpose][[2]]-Interpolation[Spectra[[i]],(ToWaveEl/@CrdList)[[i,3]]]}\[Transpose]
 ,{i,1,Length[cb]}]//Return;
 ]
-UserRemoveAve::usage="Removes the user-selected average position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
+UserRemoveAve::usage="Removes the user-selected average (background) position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
 
 
 (* ::Subsection:: *)
@@ -275,49 +275,34 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (*Interate this procedure until all points are below a certain tolerance.*)
 (**)
 (*Is it better if we do interpolation instead of taking discrete values? We will see. I expect that it won't really matter.*)
+(**)
+(*Higher kinetic energies can scatter to lower kinetic energies, which means that electrons at a lower binding energy region can scatter to a higher binding energy region. This is backwards from what I had before, which is why I have added a Reverse@ in the first line below.*)
 
 
-Shirley[data_,threshold_:0.001,itlimit_:100]:=Module[{bg,bgold,A,Aold,i,rdata=Reverse[Transpose[data][[2]]],ctr=0},
-	bg=Table[Mean@rdata[[1;;3]],{Length[rdata]}];
+Shirley[data_,A0_:0.001,threshold_:0.001,itlimit_:200]:=Module[{bg,bgold,A,Aold,n,i,fdata=Transpose[Reverse@SortBy[data,First]][[2]],ctr=0},
+	bg=Table[Mean@Reverse[fdata][[1;;5]],{Length[fdata]}];
 	bgold=5+bg;
-	A=0.0001;
-	While[((Max[Abs[bg-bgold]]/Mean[Abs[bg+bgold]])>=threshold&&ctr<=itlimit),
-		bgold=bg; (*Do this right after loop test but before modifying bg again *)
-		Aold=A;
-		For[i=3,i<=Length[bg],i++,
-			bg[[i]]=First[bg]+A*Sum[rdata[[j]]-bg[[j]],{j,1,i-1}];
-		];
-		A=Aold*(1+(Last[rdata]-Last[bg])/Last[rdata]);
-	    Print[A];
-		ctr++;
-	];
-	If[ctr>=itlimit,Print["Iteration limit of "<>ToString[itlimit]<>" exceeded in background correction."]];
-	Return[{data\[Transpose][[1]],Reverse@bg}\[Transpose]];
-]
-Shirley::usage="Retruns a Shirley background for the given data. Options are error thresholds and maximum iteration limits.";
-
-
-Shirley2[data_,threshold_:0.01,itlimit_:100]:=Module[{bg,bgold,A,Aold,n,i,fdata=Transpose[SortBy[data,First]][[2]],ctr=0},
-	bg=Table[Mean@Reverse[fdata][[1;;3]],{Length[fdata]}];
-	bgold=5+bg;
-	A=0.00005;
+	A=A0;(*This value is good for normalized datasets. It might be too small for datasets with large values*)
 	n=Length[bg];
 	While[((Max[Abs[bg-bgold]]/Mean[Abs[bg]+Abs[bgold]])>=threshold&&ctr<=itlimit),
 		bgold=bg; (*Do this right after loop test but before modifying bg again *)
 		Aold=A;
 		For[i=2,i<n,i++,
 			bg[[n-i]]=Last[bg]+A*Sum[fdata[[j]]-bg[[j]],{j,n-i,n}];
-			Print["Element "<>ToString[n-i]<>" = "<>ToString@Sum[fdata[[j]]-bg[[j]],{j,n-i,n}]];
+			(*Print["Element "<>ToString[n-i]<>" = "<>ToString@Sum[fdata[[j]]-bg[[j]],{j,n-i,n}]];*)
 		];
 		A=Aold*(1+(First[fdata]-First[bg])/First[fdata]);
-	    Print[A];
+	    (**Print[A];&**)
 		ctr++;
 	];
 	If[ctr>=itlimit,Print["Iteration limit of "<>ToString[itlimit]<>" exceeded in background correction."]];
-	Print[bg];
+	(**Print[bg];**)
 	Return[{(SortBy[data,First])\[Transpose][[1]],bg}\[Transpose]];
 ]
 Shirley::usage="Retruns a Shirley background for the given data. Options are error thresholds and maximum iteration limits.";
+
+
+ShirleySub[data_,A0_:0.001,threshold_:0.001,itlimit_:200]:={First[data\[Transpose]],Last[data\[Transpose]]-Last[Shirley[data,A0,threshold,itlimit]\[Transpose]]}\[Transpose]
 
 
 (* ::Section:: *)
