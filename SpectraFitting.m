@@ -2,11 +2,10 @@
 
 (* ::Text:: *)
 (*TO DO:*)
-(*	Generalize model to fixedpeaksmodel, or have fixedpeaksmodel call model through constraints.*)
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
 (*	Solve normalization problem definitively*)
 (*	More intelligent background subtraction*)
-(*	Residuals does not give satisfying answer. Make sure it is not subtracting negative values.*)
+(*	Update all functions with Options[] and OptionsPattern[]*)
 
 
 (* ::Section:: *)
@@ -117,8 +116,12 @@ Return[Table[{spec[[i,1]],spec[[i,2]]/ffinterp[spec[[i,1]]]},{i,1,Length[spec]}]
 SpecDivide::usage="Divides the first argument by an interpolated version of the second argument. Useful for flat-field corrections. Works best if the arguments are taken at the same x values, otherwise the function will do its best.";
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Simple Spectra Manipulation and Fitting*)
+
+
+(* ::Subsection:: *)
+(*Coordinate picking and simple background subtraction*)
 
 
 (* ::Text:: *)
@@ -200,6 +203,10 @@ Table[
 UserRemoveAve::usage="Removes the user-selected average position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
 
 
+(* ::Subsection:: *)
+(*Fitting single lorentzian, calculating Q*)
+
+
 (* ::Text:: *)
 (*Fit a single Lorentzian to each element of spectra.*)
 
@@ -256,6 +263,61 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 	,{i,1,Length[Fits]}]
 ]
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
+
+
+(* ::Subsection:: *)
+(*Shirley Background subtraction*)
+
+
+(* ::Text:: *)
+(*Basic idea: background at any point is proportional to integral of background at all lower-energy points. The proportionality constant is the only unknown value and can be found iteratively. Need to have good starting point at high energy, then just go backwards from high to low energy. At each point, background is initial value at high energy plus constant times sum (over all previous points) of measured (data) value minus background. At the end, there is an expression to update the proportionality constant. See e.g. http://physics.ucf.edu/~btonner/XRAY/Courses/Phy904/Protocol_3.pdf*)
+(**)
+(*Interate this procedure until all points are below a certain tolerance.*)
+(**)
+(*Is it better if we do interpolation instead of taking discrete values? We will see. I expect that it won't really matter.*)
+
+
+Shirley[data_,threshold_:0.001,itlimit_:100]:=Module[{bg,bgold,A,Aold,i,rdata=Reverse[Transpose[data][[2]]],ctr=0},
+	bg=Table[Mean@rdata[[1;;3]],{Length[rdata]}];
+	bgold=5+bg;
+	A=0.0001;
+	While[((Max[Abs[bg-bgold]]/Mean[Abs[bg+bgold]])>=threshold&&ctr<=itlimit),
+		bgold=bg; (*Do this right after loop test but before modifying bg again *)
+		Aold=A;
+		For[i=3,i<=Length[bg],i++,
+			bg[[i]]=First[bg]+A*Sum[rdata[[j]]-bg[[j]],{j,1,i-1}];
+		];
+		A=Aold*(1+(Last[rdata]-Last[bg])/Last[rdata]);
+	    Print[A];
+		ctr++;
+	];
+	If[ctr>=itlimit,Print["Iteration limit of "<>ToString[itlimit]<>" exceeded in background correction."]];
+	Return[{data\[Transpose][[1]],Reverse@bg}\[Transpose]];
+]
+Shirley::usage="Retruns a Shirley background for the given data. Options are error thresholds and maximum iteration limits.";
+
+
+Shirley2[data_,threshold_:0.01,itlimit_:100]:=Module[{bg,bgold,A,Aold,n,i,fdata=Transpose[SortBy[data,First]][[2]],ctr=0},
+	bg=Table[Mean@Reverse[fdata][[1;;3]],{Length[fdata]}];
+	bgold=5+bg;
+	A=0.00005;
+	n=Length[bg];
+	While[((Max[Abs[bg-bgold]]/Mean[Abs[bg]+Abs[bgold]])>=threshold&&ctr<=itlimit),
+		bgold=bg; (*Do this right after loop test but before modifying bg again *)
+		Aold=A;
+		For[i=2,i<n,i++,
+			bg[[n-i]]=Last[bg]+A*Sum[fdata[[j]]-bg[[j]],{j,n-i,n}];
+			Print["Element "<>ToString[n-i]<>" = "<>ToString@Sum[fdata[[j]]-bg[[j]],{j,n-i,n}]];
+		];
+		A=Aold*(1+(First[fdata]-First[bg])/First[fdata]);
+	    Print[A];
+		ctr++;
+	];
+	If[ctr>=itlimit,Print["Iteration limit of "<>ToString[itlimit]<>" exceeded in background correction."]];
+	Print[bg];
+	Return[{(SortBy[data,First])\[Transpose][[1]],bg}\[Transpose]];
+]
+Shirley::usage="Retruns a Shirley background for the given data. Options are error thresholds and maximum iteration limits.";
 
 
 (* ::Section:: *)
@@ -351,7 +413,7 @@ vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[M
 (*Plot[{vfn[1,2,1,0.5,x],2 vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2],vfnsimp[0.5,2,1,0.5,x]},{x,-10,10},PlotRange->All]*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Peak fitting functions*)
 
 
@@ -477,7 +539,7 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 ]
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Summary generation for multipeak fits*)
 
 
@@ -542,7 +604,7 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
-FitScore[fitlist_,data_]:=Mean[Sqrt[Total[#["FitResiduals"]^2]/Total[data\[Transpose][[2]]^2]]&/@fitlist]
+FitScore[fitlist_,data_]:=Mean@Table[Sqrt[Total[fitlist[[i]]["FitResiduals"]^2]/Total[data[[i]]\[Transpose][[2]]^2]],{i,1,Length[fitlist]}]
 
 
 ClearAll@ComparePeaks
@@ -564,8 +626,11 @@ ComparePeaks::usage="ComparePeaks shows a plot of locations of the peaks in each
 In the case of output from the FixedPeaksModel, the peak positions used in the model and the list of models themselves must also be included as arguments (in that order.)";
 
 
-(* ::Text:: *)
-(*Create a function that gives a goodness of fit in terms of the sum of the squares of the residuals, but only if we're fitting at least one peak (so n=0 is out.)*)
-
-
-modelvalue[data_,n_]/;NumericQ[n]:=If[n>=1,model[data,n][[1]],0]
+CorrectPeaks[summs_]:=Module[{maxpos=First/@SortBy[Abs]/@(First/@Transpose/@summs)},
+	Table[{summs[[i,All,1]]-maxpos[[i]],summs[[i,All,2]]}\[Transpose],{i,1,Length[summs]}]
+];
+CorrectPeaks[summs_,data_]:=Module[{maxpos=MaxPos/@data},
+	Table[{summs[[i,All,1]]+maxpos[[i]],summs[[i,All,2]]}\[Transpose],{i,1,Length[summs]}]
+];
+CorrectPeaks::usage="CorrectPeaks takes in a peak list generated by compare-peaks and the original data and shifts the peak positions back to their original values (so not around zero.)
+If no data is passed, it shifts the peak positions so that all of the peaks closest to the origin in position are redefined to lie at zero, thus normalizing to get a better idea of the relative positions of the sattelite peaks.";
