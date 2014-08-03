@@ -398,7 +398,7 @@ vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[M
 (*Plot[{vfn[1,2,1,0.5,x],2 vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2],vfnsimp[0.5,2,1,0.5,x]},{x,-10,10},PlotRange->All]*)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Peak fitting functions*)
 
 
@@ -524,7 +524,7 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 ]
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Summary generation for multipeak fits*)
 
 
@@ -556,7 +556,7 @@ FitSummary[data_,nlm_,func_:"g",fixedpeaks_:False,plot_:True]:=Module[{params=nl
 			datalist={Abs[datalistraw[[All,1]]^2*datalistraw[[All,2]]/(totalweight)],datalistraw[[All,2]]}\[Transpose];
 			Print[TableForm[Flatten[{{{"Weight","\[Sigma]"}},datalist},1]]]
 		,
-			(* Not sure what the proper normalization is for Voigt functions. Working on this. *)
+			(* Integral of voigt function (weight) is proportional to only A^2 and none of the other parameters. *)
 			totalweight=Total@Abs[datalistraw[[All,1]]^2];
 			datalist={Abs[datalistraw[[All,1]]^2/(totalweight)],datalistraw[[All,2]],datalistraw[[All,3]]}\[Transpose];
 			Print[TableForm[Flatten[{{{"A","\[Sigma]","\[Delta]"}},datalist},1]]]
@@ -589,7 +589,7 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
-FitScore[fitlist_,data_]:=Mean@Table[Sqrt[Total[fitlist[[i]]["FitResiduals"]^2]/Total[data[[i]]\[Transpose][[2]]^2]],{i,1,Length[fitlist]}]
+FitScore[fitlist_,data_]:={Mean[#],Median[#]}&@Table[Sqrt[Total[fitlist[[i]]["FitResiduals"]^2]/Total[data[[i]]\[Transpose][[2]]^2]],{i,1,Length[fitlist]}]
 
 
 ClearAll@ComparePeaks
