@@ -3,8 +3,6 @@
 (* ::Text:: *)
 (*TO DO:*)
 (*	Create superfunction to fit variable number of peaks and stop when agreement is sufficiently good.*)
-(*	Solve normalization problem definitively*)
-(*	More intelligent background subtraction*)
 (*	Update all functions with Options[] and OptionsPattern[]*)
 
 
@@ -23,10 +21,6 @@ If you need additional help, all of the functions have usage instructions that c
 
 
 SpectraHelp[]
-
-
-(* ::Text:: *)
-(*Here are a set of tools to fit spectra effectively. For more information, see the readme and example usage files at https://github.com/ruffinevans/SpectraFitting*)
 
 
 (* ::Section:: *)
@@ -274,9 +268,9 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 (**)
 (*Interate this procedure until all points are below a certain tolerance.*)
 (**)
-(*Is it better if we do interpolation instead of taking discrete values? We will see. I expect that it won't really matter.*)
+(*Is it better if we do interpolation instead of taking discrete values? This is perhaps worth experimenting in the future, but I'm pretty sure the answer is no.*)
 (**)
-(*Higher kinetic energies can scatter to lower kinetic energies, which means that electrons at a lower binding energy region can scatter to a higher binding energy region. This is backwards from what I had before, which is why I have added a Reverse@ in the first line below.*)
+(*Higher kinetic energies can scatter to lower kinetic energies, which means that electrons at a lower BINDING energy region can scatter to a higher BINDING energy region. This is backwards from what I had before, which is why I have added a Reverse@ in the first line below.*)
 
 
 Shirley[data_,A0_:0.001,threshold_:0.001,itlimit_:200]:=Module[{bg,bgold,A,Aold,n,i,fdata=Transpose[Reverse@SortBy[data,First]][[2]],ctr=0},
@@ -419,7 +413,7 @@ FindMinimum[objfunc,Flatten@dataconfig]
 
 
 (* ::Text:: *)
-(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely.*)
+(*Model does a better job of fitting. It has more finely tuned parameters and can often fit *everything* nicely. It also uses the differential evolution method which seems to be more effective than whatever method Mathematica wants to use by default. It then polishes things up with a quasi-newton optimization once the differential evolution has converged.*)
 
 
 Model[data_,nOrParamguess_,bounds_:{},func_:"g",sf_:0.95,cp_:0,method_:0]:=
@@ -487,7 +481,7 @@ The next optional parameter is a flag \"g\", \"l\", or \"v\" to pick gaussian, l
 
 
 (* ::Text:: *)
-(*This function is similar to model but takes peak positions as given. Note that it is just a special case of the above with perfect constraints on the peak positions. Once I compare the two functions to each other, I can get rid of this function.*)
+(*This function is similar to model but takes peak positions as given. Note that it is just a special case of the above with perfect constraints on the peak positions. In theory, this FIxedPeaksModel is redundant, but in practice Model[] does not like to be passed perfect constraints.*)
 
 
 FixedPeaksModel[data_,offsets_,sf_:0.95,cp_:0]:=Module[{dataconfig,modelfunc,objfunc,fitvar,fitres,guess,n=Length[offsets],funcparams},
@@ -589,10 +583,22 @@ Optional arguments are a boolean fixedpeaks which tells the function whether or 
 The last optional argument plot tells the function whether or not to generate plots or just tables of statistical data.";
 
 
+(* ::Text:: *)
+(*Generate a score for an array of fits (and originating data). Shows the mean and the median RMS residual value across the whole list of fits.*)
+
+
 FitScore[fitlist_,data_]:={Mean[#],Median[#]}&@Table[Sqrt[Total[fitlist[[i]]["FitResiduals"]^2]/Total[data[[i]]\[Transpose][[2]]^2]],{i,1,Length[fitlist]}]
 
 
 ClearAll@ComparePeaks
+
+
+(* ::Subsubsection:: *)
+(*Peak position correction*)
+
+
+(* ::Text:: *)
+(*These functions correct the positions of peaks. See the usage instructions. Note that the function is overloaded.*)
 
 
 ComparePeaks[summs_,sheets_,peakpositions_:Null,models_:Null]:=If[ListQ[peakpositions],
