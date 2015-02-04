@@ -254,7 +254,7 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 				ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]
 			}
 		];
-		{DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]]
+		{DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]],
 			Fits[[i]]["BestFitParameters"][[3,2]],
 			Fits[[i]]["ParameterErrors"][[2]],
 			Fits[[i]]["BestFitParameters"][[2,2]],
