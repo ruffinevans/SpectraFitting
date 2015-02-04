@@ -253,7 +253,15 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
 				ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]
 			}
-		]
+		];
+		{DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]]
+			Fits[[i]]["BestFitParameters"][[3,2]],
+			Fits[[i]]["ParameterErrors"][[2]],
+			Fits[[i]]["BestFitParameters"][[2,2]],
+			Fits[[i]]["ParameterErrors"][[3]],
+			CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]],
+			CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]
+		}
 	,{i,1,Length[Fits]}]
 ]
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
