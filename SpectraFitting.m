@@ -95,9 +95,11 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 (*Import all files that are not mathematica files from a folder.*)
 
 
-GetSpecDir[path_:NotebookDirectory[],format_:"Data"]:=Module[{spectralist=Import[path]},SetDirectory[path];
-	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)]; (* Remove mathematica files from the list of possible spectra.*)
-	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[Import[path]]}]];
+GetSpecDir[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
+	SetDirectory[path];
+	spectralist=Import[path];
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[spectralist]}]];
 ]
 GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring Mathematica .nb and .m files.";
 
