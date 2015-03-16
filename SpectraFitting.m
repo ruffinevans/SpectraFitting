@@ -10,14 +10,15 @@
 (*Help Section*)
 
 
-SpectraHelp[]:=Print["Usage Instructions:\n
+SpectraHelp[]:=Print["Usage Instructions (to fit transmission spectra):\n
 1. Get a list of spectra from a directory by using the GetSpecDir[path] function.\n
 2. (Optional) Get an individual spectrum for flatfield correction using the GetSpec[path] function. Divide each spectrum by this flat-field using the SpecDivide[spec,ffspec] function.\n
 3. Initialize a list of guesses using the CoordInit[Spectra,center,d] function, where center is a very preliminary guess for the center point of a generic spectrum and d is the overall spread to zoom in on for further fitting. You should save this guess as a variable.\n
 4. Use the PickGuesses[Spectra,CoordList] command to interactively refine these guesses. CoordList should be the variable you defined in the previous step.\n
 5. Run SingleLorentzianFit[Spectra, Coordlist] to fit each function to a single Lorentzian. Save the output to a variable. More options are coming soon.\n
 6. Use the ShowFits[Spectra, CoordList, Fits, Path] where Fits is the list of fits and Path is the original directory to display all of the fits and important parameters.\n\n
-If you need additional help, all of the functions have usage instructions that can be queried with two question marks and the name of the function, e.g. ??ShowFits ."];
+If you need additional help, all of the functions have usage instructions that can be queried with two question marks and the name of the function, e.g. ??ShowFits .\n\n
+This package also includes more advanced functionality designed to efficiently fit XPS spectra, including multi-peak fits of Gaussian, Lorentzian, and Voigt profiles. See the source code for more information."];
 
 
 SpectraHelp[]
@@ -94,7 +95,7 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 (*Import all files that are not mathematica files from a folder.*)
 
 
-GetSpecDir[path_,format_:"csv"]:=Module[{spectralist=Import[path]},SetDirectory[path];
+GetSpecDir[path_:NotebookDirectory[],format_:"Data"]:=Module[{spectralist=Import[path]},SetDirectory[path];
 	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[Import[path]]}]];
 ]
@@ -205,7 +206,8 @@ UserRemoveAve::usage="Removes the user-selected average (background) position in
 (*Fit a single Lorentzian to each element of spectra.*)
 
 
-SingleLorentzianFit[Spectra_,CrdList_]:=Module[{zoomed=UserRemoveAve[Spectra,CrdList],wavelist=(ToWaveEl/@CrdList)},
+SingleLorentzianFit[Spectra_,CrdList_,BkgdSub_:True]:=Module[{zoomed=UserRemoveAve[Spectra,CrdList],wavelist=(ToWaveEl/@CrdList)},
+	If[BkgdSub,zoomed=ShirleySub/@zoomed];
 	Table[
 		Print["Fitting "<>ToString[i]<>" out of "<>ToString[Length[Spectra]]];
 		NonlinearModelFit[zoomed[[i]],{A (1+((x-x0)/\[Gamma])^2)^-1,A>0,x0>wavelist[[i,2,1]],
@@ -215,7 +217,7 @@ SingleLorentzianFit[Spectra_,CrdList_]:=Module[{zoomed=UserRemoveAve[Spectra,Crd
 		{i,1,Length[Spectra]}
 	]
 ];
-SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models.";
+SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models. A third optional argument decides whether or not to perform a Shirley background subtraction, which is an acceptable (if not physically well-motivated) algorithm.";
 
 
 (* ::Text:: *)
@@ -238,7 +240,7 @@ StyleBox[\"HWHM\",\nFontWeight->\"Bold\"]\). The FWHM is 2\[Gamma] in my paramet
 TraditionalForm]\)/\[CapitalDelta]\[Omega] where \[CapitalDelta]\[Omega] is 2\[Gamma].";
 
 
-ShowFits[Spectra_,CrdList_,Fits_,Path_]:=
+ShowFits[Spectra_,CrdList_,Fits_,Path_,Verbose_:False]:=
 Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 	Table[
 		Print[
@@ -260,11 +262,19 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 			Fits[[i]]["BestFitParameters"][[2,2]],
 			Fits[[i]]["ParameterErrors"][[3]],
 			CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]],
-			CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]
+			CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]],
+			If[Verbose,
+			{Show[
+				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
+				ListLinePlot[Spectra[[i]],PlotRange->All,PlotStyle->Larger]],
+			Show[
+				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
+				ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]}]
 		}
 	,{i,1,Length[Fits]}]
 ]
-ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.";
+ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.
+The optional last flag \"Verbose\" is a Boolean that decides whether or not to return the plots from the function as well as the scalar parameters of interest.";
 
 
 (* ::Subsection:: *)
