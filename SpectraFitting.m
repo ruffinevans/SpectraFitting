@@ -356,7 +356,7 @@ gfn::usage="gfn[A,\[Mu],\[Sigma],x] is a gaussian with prefactor A, mean \[Mu], 
 
 lfn[A_,\[Mu]_,\[Sigma]_,x_]:=A^2*(1+((x-\[Mu])/\[Sigma])^2)^-1;
 lfn[A_,\[Mu]_,\[Sigma]_,x_,c_]:=A^2*(1+((x-\[Mu])/\[Sigma])^2)^-1+c;
-lfn::usage="lfn[A,\[Mu],\[Sigma],x] is a Lorentzian with prefactor A, mean \[Mu], HWHM \[Sigma], with independent variable x.\ngfn[A,\[Mu],\[Sigma],x,c] is the same plus a constant c.";
+lfn::usage="lfn[A,\[Mu],\[Sigma],x] is a Lorentzian with prefactor A, mean \[Mu], standard deviation \[Sigma], with independent variable x.\ngfn[A,\[Mu],\[Sigma],x,c] is the same plus a constant c.";
 
 
 (* ::Subsubsection:: *)
