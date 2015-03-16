@@ -101,7 +101,32 @@ GetSpecDir[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",No
 	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[spectralist]}]];
 ]
-GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring Mathematica .nb and .m files.";
+GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring common non-spectra file types, including images, metadata, mathematica notebooks/packages, etc.";
+
+
+(* ::Text:: *)
+(*Function to give a list of all such files, helpful for putting spectra and filenames in correspondence:*)
+
+
+GetSpecDirNames[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
+	spectralist=Import[path];
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	Return[spectralist];
+]
+GetSpecDirNames::usage="Gives the names of all the files that GetSpecDir would import from a directory.";
+
+
+(* ::Text:: *)
+(*Should have this be a special case of the above function with optional arguments, but that will have to come in a later update.*)
+
+
+GetSpecDirNameTable[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
+	spectralist=Import[path];
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	Print[TableForm[{Range[Length[spectralist]],spectralist}\[Transpose]]];
+	Return[spectralist];
+]
+GetSpecDirNameTable::usage="Gives the names of all the files that GetSpecDir would import from a directory. Also prints an easy-to-read table.";
 
 
 (* ::Text:: *)
