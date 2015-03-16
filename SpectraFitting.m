@@ -98,7 +98,7 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 GetSpecDir[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	SetDirectory[path];
 	spectralist=Import[path];
-	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[spectralist]}]];
 ]
 GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring Mathematica .nb and .m files.";
@@ -139,7 +139,7 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 (*Initialize coordinate list:*)
 
 
-CoordInit[Spectra_,center_,d_,ypos_:1000]:=Module[{\[Lambda]list},
+CoordInit[Spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list},
 \[Lambda]list=Table[{center,{center-d/2,center+d/2},center-3d/8},{i,1,Length[Spectra]}];
 Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
 ];
