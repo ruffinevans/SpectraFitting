@@ -13,19 +13,39 @@ LifetimeFittingHelp[]
 
 
 (* ::Text:: *)
+(*Copying from spectra*)
+(*fitting code. Could also call as dependency, but doesn't make sense for just one simple function.*)
+
+
+MaxPos[data_,filter_:(1 #1&)]:=(#1[[Position[#1,Max[Transpose[#1][[2]]]][[1,1]]]][[1]]&)[filter[data]]
+
+
+(* ::Text:: *)
 (*Simple command with a few options to fit lifetime data*)
 
 
 LifetimeFit[data_,window_,bkgrdconstr_]:=
-Module[{a,b,x,\[Tau]0,lifetimeData,model,lifetimeFit},
-lifetimeData=Select[data,window[[1]]<#[[1]]<window[[2]]&];
-model=a+b*Exp[-(x-window[[1]])/\[Tau]0];
-lifetimeFit=NonlinearModelFit[lifetimeData,{model,a>bkgrdconstr},{{a,0.5},{b,1},{\[Tau]0,1}},x];
-Print[Show[ListPlot[{data,lifetimeData},PlotRange->{{window[[1]]-3,window[[2]]+5},All},Joined->True,ImageSize->500],Plot[lifetimeFit[x],{x,window[[1]],window[[2]]},PlotStyle->{Red,Thick},PlotRange->All]],
-Show[ListLogPlot[{data,lifetimeData},PlotRange->{{window[[1]]-3,window[[2]]+5},All},Joined->True,ImageSize->500],LogPlot[lifetimeFit[x],{x,window[[1]],window[[2]]},PlotStyle->{Red,Thick}]]
-];
-Return[lifetimeFit["ParameterTable"]]
+Module[{a,b,x,\[Tau]0,lifetimeData,model,lifetimeFit,windowtemp=window},
+	If[window==0,windowtemp=MaxPos[data]+{0.4,4}];
+	Print[windowtemp];
+	lifetimeData=Select[data,windowtemp[[1]]<#[[1]]<windowtemp[[2]]&];
+	model=a+b*Exp[-(x-windowtemp[[1]])/\[Tau]0];
+	lifetimeFit=NonlinearModelFit[lifetimeData,{model,a>bkgrdconstr},{{a,0.5},{b,1},{\[Tau]0,1}},x];
+	Print[
+		Show[
+			ListPlot[{data,lifetimeData},PlotRange->{{windowtemp[[1]]-3,windowtemp[[2]]+5},All},Joined->True,ImageSize->500],
+			Plot[lifetimeFit[x],{x,windowtemp[[1]],windowtemp[[2]]},PlotStyle->{Red,Thick},PlotRange->All]
+		],
+		Show[
+			ListLogPlot[{data,lifetimeData},PlotRange->{{windowtemp[[1]]-3,windowtemp[[2]]+5},All},Joined->True,ImageSize->500],
+			LogPlot[lifetimeFit[x],{x,windowtemp[[1]],windowtemp[[2]]},PlotStyle->{Red,Thick}]
+		]
+	];
+	Return[lifetimeFit["ParameterTable"]]
 ]
+
+
+LifetimeFit[data_]:=LifetimeFit[data,0,0]
 
 
 (* ::Text:: *)
