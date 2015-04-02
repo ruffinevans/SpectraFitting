@@ -6,7 +6,7 @@
 (*	Update all functions with Options[] and OptionsPattern[]*)
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Help Section*)
 
 
@@ -24,7 +24,7 @@ This package also includes more advanced functionality designed to efficiently f
 SpectraHelp[]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*File I/O and grooming*)
 
 
@@ -142,7 +142,7 @@ SpecDivide::usage="Divides the first argument by an interpolated version of the 
 (*Simple Spectra Manipulation and Fitting*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Coordinate picking and simple background subtraction*)
 
 
@@ -244,7 +244,9 @@ SingleLorentzianFit[Spectra_,CrdList_,BkgdSub_:True]:=Module[{zoomed=UserRemoveA
 		{i,1,Length[Spectra]}
 	]
 ];
-SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models. A third optional argument decides whether or not to perform a Shirley background subtraction, which is an acceptable (if not physically well-motivated) algorithm.";
+SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models.
+A third optional argument decides whether or not to perform a Shirley background subtraction, which is an acceptable (if not physically well-motivated) algorithm.
+If this fit function passes overflow errors, it is possible that the Shirley subtraction is failing, in which case the third argument should be specified as False";
 
 
 (* ::Text:: *)
@@ -305,6 +307,28 @@ The optional last flag \"Verbose\" is a Boolean that decides whether or not to r
 
 
 (* ::Subsection:: *)
+(*Deconvolution*)
+
+
+(* ::Text:: *)
+(*Default laser spectrum for Horiba spectrometer, fine grating. Not guaranteed to work in general, even for our instrument!*)
+
+
+defaultkerspec={{736.339`,1055},{736.348`,1062},{736.356`,1062},{736.365`,1061},{736.374`,1066},{736.382`,1058},{736.391`,1066},{736.4`,1056},{736.408`,1055},{736.417`,1065},{736.426`,1059},{736.434`,1062},{736.443`,1064},{736.452`,1060},{736.46`,1062},{736.469`,1058},{736.477`,1064},{736.486`,1060},{736.495`,1069},{736.503`,1061},{736.512`,1065},{736.521`,1062},{736.529`,1064},{736.538`,1062},{736.547`,1065},{736.555`,1061},{736.564`,1064},{736.573`,1062},{736.581`,1061},{736.59`,1061},{736.598`,1065},{736.607`,1063},{736.616`,1070},{736.624`,1061},{736.633`,1065},{736.642`,1100},{736.65`,1182},{736.659`,1388},{736.668`,1859},{736.676`,2026},{736.685`,1870},{736.694`,1539},{736.702`,1284},{736.711`,1106},{736.719`,1068},{736.728`,1069},{736.737`,1064},{736.745`,1054},{736.754`,1064},{736.763`,1059},{736.771`,1064}};
+
+
+SpectDC[spec_,kerspec_:defaultkerspec]:=Module[
+	{bg=Median[kerspec\[Transpose][[2]]],ker,specy=spec\[Transpose][[2]],dcspecy},
+	If[kerspec==defaultkerspec,Print["\!\(\*
+StyleBox[\"Warning\",\nFontVariations->{\"Underline\"->True}]\)! Using default kernel spectrum for deconvolution (finest grating, Horiba spectrometer). This may not be appropriate in all cases."]];
+	ker=(#[[2]]-bg)&/@kerspec;
+	dcspecy=ListDeconvolve[ker,specy];
+	Return[{spec\[Transpose][[1]],dcspecy}\[Transpose]]
+]
+SpectDc::usage="SpectDC[spec,kerspec] deconvolves spect by using kernel kerspec, which should be a narrowband laser source with a somewhat narrowly defined window. See the default spectrum defaultlaserspec (loaded with this package) for an example. If only one argument is passed, defaultlaserspec is used by default. However, this may not be appropriate in all cases.";
+
+
+(* ::Subsection::Closed:: *)
 (*Shirley Background subtraction*)
 
 
@@ -348,7 +372,7 @@ ShirleySub[data_,A0_:0.001,threshold_:0.001,itlimit_:200]:={First[data\[Transpos
 (*Multipeak spectrum fitting*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*More data grooming*)
 
 
@@ -437,7 +461,7 @@ vfnsimp[A_,\[Mu]_,\[Sigma]_,\[Delta]_,x_]:=A^2*Exp[-4*Log[2]*(1-\[Delta])*(x-\[M
 (*Plot[{vfn[1,2,1,0.5,x],2 vfnfast[1,2,1,0.5,x],(PDF@VoigtDistribution[0.5,1])[x-2],vfnsimp[0.5,2,1,0.5,x]},{x,-10,10},PlotRange->All]*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Peak fitting functions*)
 
 
@@ -563,7 +587,7 @@ FixedPeaksVoigtModel[data_,offsets_]:=Module[{dataconfig,modelfunc,objfunc,fitva
 ]
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Summary generation for multipeak fits*)
 
 
