@@ -24,7 +24,7 @@ This package also includes more advanced functionality designed to efficiently f
 SpectraHelp[]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*File I/O and grooming*)
 
 
@@ -98,7 +98,7 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 GetSpecDir[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	SetDirectory[path];
 	spectralist=Import[path];
-	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[spectralist]}]];
 ]
 GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring common non-spectra file types, including images, metadata, mathematica notebooks/packages, etc.";
@@ -110,7 +110,7 @@ GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring c
 
 GetSpecDirNames[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	spectralist=Import[path];
-	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[spectralist];
 ]
 GetSpecDirNames::usage="Gives the names of all the files that GetSpecDir would import from a directory.";
@@ -122,7 +122,7 @@ GetSpecDirNames::usage="Gives the names of all the files that GetSpecDir would i
 
 GetSpecDirNameTable[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	spectralist=Import[path];
-	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]&)]; (* Remove mathematica files from the list of possible spectra.*)
+	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)	
 	Print[TableForm[{Range[Length[spectralist]],spectralist}\[Transpose]]];
 	Return[spectralist];
 ]
@@ -142,7 +142,7 @@ SpecDivide::usage="Divides the first argument by an interpolated version of the 
 (*Simple Spectra Manipulation and Fitting*)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Coordinate picking and simple background subtraction*)
 
 
@@ -184,7 +184,11 @@ PickGuesses[Spectra_,CrdList_,DataDir_:" "]:=Module[{CrdListTemp=CrdList},
 Table[
 	LocatorPane[With[{i=i},Dynamic[Unevaluated@CrdList[[i]]]],
 		ListLinePlot[Spectra[[i]],
-			ImageSize->Medium,If[DirectoryQ[DataDir],PlotLabel->Import[DataDir][[i]],PlotLabel->"Plot "<>ToString[i]],
+			ImageSize->Medium,
+			If[DirectoryQ[DataDir],
+				PlotLabel->GetSpecDirNames[DataDir][[i]],
+				PlotLabel->"Plot "<>ToString[i]
+			],
 			PlotRange->{{CrdListTemp[[i]]\[Transpose][[1,2]],CrdListTemp[[i]]\[Transpose][[1,3]]},All}
 		]
 		,Appearance->{Style["o",Red],Style[">",Blue],Style["<",Blue],Style["\[Vee]",Black]}
@@ -273,7 +277,7 @@ ShowFits[Spectra_,CrdList_,Fits_,Path_,Verbose_:False]:=
 Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 	Table[
 		Print[
-			{ToString[DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]]]<>
+			{ToString[GetSpecDirNames[Path][[i]]]<>
 			", \!\(\*SubscriptBox[\(\[Lambda]\), \(center\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[3,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[2]]]<>
 			", \!\(\*SubscriptBox[\(\[Gamma]\), \(FWHM\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[2,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[3]]]<>
 			", Q="<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]]]<>"\[PlusMinus]"<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]],
@@ -285,7 +289,7 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 				ListLinePlot[AveList[[i]],PlotRange->All,PlotStyle->Larger]]
 			}
 		];
-		{DeleteCases[Import[Path],_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]&)][[i]],
+		{GetSpecDirNames[Path][[i]],
 			Fits[[i]]["BestFitParameters"][[3,2]],
 			Fits[[i]]["ParameterErrors"][[2]],
 			Fits[[i]]["BestFitParameters"][[2,2]],
