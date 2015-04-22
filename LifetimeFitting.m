@@ -30,7 +30,9 @@ Module[{a,b,x,\[Tau]0,lifetimeData,model,lifetimeFit,windowtemp=window},
 	Print[windowtemp];
 	lifetimeData=Select[data,windowtemp[[1]]<#[[1]]<windowtemp[[2]]&];
 	model=a+b*Exp[-(x-windowtemp[[1]])/\[Tau]0];
-	lifetimeFit=NonlinearModelFit[lifetimeData,{model,a>bkgrdconstr},{{a,0.5},{b,1},{\[Tau]0,1}},x];
+	lifetimeFit=NonlinearModelFit[lifetimeData,{model,a>bkgrdconstr},{{a,0.5},{b,1000},{\[Tau]0,1.5}},x,Method->
+			{NMinimize, Method -> {"DifferentialEvolution","ScalingFactor"->0.8,"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}}}
+			];
 	Print[
 		Show[
 			ListPlot[{data,lifetimeData},PlotRange->{{windowtemp[[1]]-3,windowtemp[[2]]+5},All},Joined->True,ImageSize->500],
