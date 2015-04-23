@@ -164,8 +164,12 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 (*Initialize coordinate list:*)
 
 
-CoordInit[Spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list},
-\[Lambda]list=Table[{center,{center-d/2,center+d/2},center-3d/8},{i,1,Length[Spectra]}];
+CoordInit[Spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list,xmin,xmax},
+\[Lambda]list=Table[
+xmin=Min[Spectra[[i]]\[Transpose][[1]]];
+xmax=Max[Spectra[[i]]\[Transpose][[1]]];
+{center,{Max[xmin,center-d/2],Min[xmax,center+d/2]},center-3d/8},{i,1,Length[Spectra]}
+];
 Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
 ];
 CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (second argument) and the spread in peak positions (third argument) \nThese initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.";
