@@ -24,7 +24,7 @@ This package also includes more advanced functionality designed to efficiently f
 SpectraHelp[]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*File I/O and grooming*)
 
 
@@ -168,7 +168,7 @@ CoordInit[Spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list,xmin,xmax},
 \[Lambda]list=Table[
 xmin=Min[Spectra[[i]]\[Transpose][[1]]];
 xmax=Max[Spectra[[i]]\[Transpose][[1]]];
-{center,{Max[xmin,center-d/2],Min[xmax,center+d/2]},center-3d/8},{i,1,Length[Spectra]}
+{center,{Max[xmin,center-d/2],Min[xmax,center+d/2]},Max[xmin+(xmax-xmin)/8,center-3d/8]},{i,1,Length[Spectra]}
 ];
 Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
 ];
@@ -233,7 +233,7 @@ Table[
 UserRemoveAve::usage="Removes the user-selected average (background) position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Fitting single lorentzian, calculating Q*)
 
 
@@ -314,7 +314,7 @@ ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The 
 The optional last flag \"Verbose\" is a Boolean that decides whether or not to return the plots from the function as well as the scalar parameters of interest.";
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Deconvolution*)
 
 
