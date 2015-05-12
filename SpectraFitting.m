@@ -24,7 +24,7 @@ This package also includes more advanced functionality designed to efficiently f
 SpectraHelp[]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*File I/O and grooming*)
 
 
@@ -98,6 +98,7 @@ If you want to import an Excel file that has been formatted by the Advantage XPS
 GetSpecDir[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	SetDirectory[path];
 	spectralist=Import[path];
+	spectralist=SortBy[FileNames[spectralist], FileDate[#]&];
 	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[Table[GetSpec[spectralist[[i]],format],{i,1,Length[spectralist]}]];
 ]
@@ -110,6 +111,7 @@ GetSpecDir::usage="Imports all the files as spectra from a directory, ignoring c
 
 GetSpecDirNames[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	spectralist=Import[path];
+	spectralist=SortBy[FileNames[spectralist], FileDate[#]&];
 	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)
 	Return[spectralist];
 ]
@@ -122,6 +124,7 @@ GetSpecDirNames::usage="Gives the names of all the files that GetSpecDir would i
 
 GetSpecDirNameTable[pathtemp_:"None",format_:"Data"]:=Module[{path=If[pathtemp=="None",NotebookDirectory[],pathtemp],spectralist},
 	spectralist=Import[path];
+	spectralist=SortBy[FileNames[spectralist], FileDate[#]&];
 	spectralist=DeleteCases[spectralist,_?(StringMatchQ[#,"*.nb"]||StringMatchQ[#,"*.m"]||StringMatchQ[#,"*.jpg"]||StringMatchQ[#,"*.jpeg"]||StringMatchQ[#,"*.pdf"]||StringMatchQ[#,"*metadata*"]||StringMatchQ[#,"*.png"]||StringMatchQ[#,"*g2meta.txt"]||StringMatchQ[#,"*zip"]||StringMatchQ[#,"*rar"]&)]; (* Remove mathematica files from the list of possible spectra.*)	
 	Print[TableForm[{Range[Length[spectralist]],spectralist}\[Transpose]]];
 	Return[spectralist];
@@ -142,7 +145,7 @@ SpecDivide::usage="Divides the first argument by an interpolated version of the 
 (*Simple Spectra Manipulation and Fitting*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Coordinate picking and simple background subtraction*)
 
 
@@ -233,7 +236,7 @@ Table[
 UserRemoveAve::usage="Removes the user-selected average (background) position in CrdList from Spectra to aid fitting. Spectra MUST be sorted by increasing x values!";
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Fitting single lorentzian, calculating Q*)
 
 
@@ -376,7 +379,7 @@ Shirley::usage="Retruns a Shirley background for the given data. Options are err
 ShirleySub[data_,A0_:0.001,threshold_:0.001,itlimit_:200]:={First[data\[Transpose]],Last[data\[Transpose]]-Last[Shirley[data,A0,threshold,itlimit]\[Transpose]]}\[Transpose]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Multipeak spectrum fitting*)
 
 
