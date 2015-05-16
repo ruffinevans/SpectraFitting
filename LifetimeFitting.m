@@ -43,7 +43,30 @@ Module[{a,b,x,\[Tau]0,lifetimeData,model,lifetimeFit,windowtemp=window},
 			LogPlot[lifetimeFit[x],{x,windowtemp[[1]],windowtemp[[2]]},PlotStyle->{Red,Thick}]
 		]
 	];
-	Return[lifetimeFit["ParameterTable"]]
+	Return[lifetimeFit];
+]
+
+
+DoubleLifetimeFit[data_,window_,bkgrdconstr_]:=
+Module[{x,a,b1,\[Tau]1,b2,\[Tau]2,lifetimeData,model,lifetimeFit,windowtemp=window},
+	If[window==0,windowtemp=MaxPos[data]+{0.4,4}];
+	Print[windowtemp];
+	lifetimeData=Select[data,windowtemp[[1]]<#[[1]]<windowtemp[[2]]&];
+	model=a+b1*Exp[-(x-windowtemp[[1]])/\[Tau]1]+b2*Exp[-(x-windowtemp[[1]])/\[Tau]2];
+	lifetimeFit=NonlinearModelFit[lifetimeData,{model,a>bkgrdconstr},{{a,0.5},{b1,1000},{\[Tau]1,1.5},{b2,1000},{\[Tau]2,1.5}},x,Method->
+			{NMinimize, Method -> {"DifferentialEvolution","ScalingFactor"->0.8,"PostProcess" -> {FindMinimum, Method -> "QuasiNewton"}}}
+			];
+	Print[
+		Show[
+			ListPlot[{data,lifetimeData},PlotRange->{{windowtemp[[1]]-3,windowtemp[[2]]+5},All},Joined->True,ImageSize->500],
+			Plot[lifetimeFit[x],{x,windowtemp[[1]],windowtemp[[2]]},PlotStyle->{Red,Thick},PlotRange->All]
+		],
+		Show[
+			ListLogPlot[{data,lifetimeData},PlotRange->{{windowtemp[[1]]-3,windowtemp[[2]]+5},All},Joined->True,ImageSize->500],
+			LogPlot[lifetimeFit[x],{x,windowtemp[[1]],windowtemp[[2]]},PlotStyle->{Red,Thick}]
+		]
+	];
+	Return[lifetimeFit];
 ]
 
 
