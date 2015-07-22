@@ -257,7 +257,8 @@ SingleLorentzianFit[Spectra_,CrdList_,BkgdSub_:True]:=Module[{zoomed=UserRemoveA
 ];
 SingleLorentzianFit::usage="Fits each spectrum in \"Spectra\" (the first argument) to a Lorentzian, based on the guesses in CrdList. The output will be a list of fitted models.
 A third optional argument decides whether or not to perform a Shirley background subtraction, which is an acceptable (if not physically well-motivated) algorithm.
-If this fit function passes overflow errors, it is possible that the Shirley subtraction is failing, in which case the third argument should be specified as False";
+If this fit function passes overflow errors, it is possible that the Shirley subtraction is failing, in which case the third argument should be specified as False.
+Note that the \[Gamma] fitted by this function is the HWHM, not the FWHM.";
 
 
 (* ::Text:: *)
@@ -281,12 +282,13 @@ TraditionalForm]\)/\[CapitalDelta]\[Omega] where \[CapitalDelta]\[Omega] is 2\[G
 
 
 ShowFits[Spectra_,CrdList_,Fits_,Path_,Verbose_:False]:=
+Quiet[
 Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 	Table[
 		Print[
 			{ToString[GetSpecDirNames[Path][[i]]]<>
 			", \!\(\*SubscriptBox[\(\[Lambda]\), \(center\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[3,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[2]]]<>
-			", \!\(\*SubscriptBox[\(\[Gamma]\), \(FWHM\)]\)="<>ToString[Fits[[i]]["BestFitParameters"][[2,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[3]]]<>
+			", \!\(\*SubscriptBox[\(\[Gamma]\), \(FWHM\)]\)="<>ToString[2*Fits[[i]]["BestFitParameters"][[2,2]]]<>"\[PlusMinus]"<>ToString[Fits[[i]]["ParameterErrors"][[3]]]<>
 			", Q="<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]]]]<>"\[PlusMinus]"<>ToString[CalcQ[Fits[[i]]["BestFitParameters"][[3,2]],Fits[[i]]["BestFitParameters"][[2,2]],Fits[[i]]["ParameterErrors"][[3]]][[2]]],
 			Show[
 				Plot[Fits[[i]]//Normal,{x,wavelist[[i,2,1]],wavelist[[i,2,2]]},PlotRange->All,PlotStyle->{Red,Thick}],
@@ -313,6 +315,7 @@ Module[{wavelist=(ToWaveEl/@CrdList),AveList=UserRemoveAve[Spectra,CrdList]},
 		}
 	,{i,1,Length[Fits]}]
 ]
+,{FittedModel::constr}]
 ShowFits::usage="Show the fits for Spectra based on the guesses in CrdList. The actual fits must be given as a list of models in Fits. The original directory should be given as a path in the last argument to generate the file names corresponding to the spectra.
 The optional last flag \"Verbose\" is a Boolean that decides whether or not to return the plots from the function as well as the scalar parameters of interest.";
 
