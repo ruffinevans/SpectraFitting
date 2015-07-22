@@ -145,7 +145,24 @@ SpecDivide::usage="Divides the first argument by an interpolated version of the 
 (*Simple Spectra Manipulation and Fitting*)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
+(*Fast simple peak finding*)
+
+
+(* ::Text:: *)
+(*This function is decent at finding robust peaks, specialized to the case of spectrometer data.*)
+
+
+FindPeakXY[xydata_]:=
+Module[{datapoint,ydata,threshold},
+	ydata=xydata\[Transpose][[2]];
+	threshold=Median[#]+0.5*StandardDeviation[#]&@ydata;
+	datapoint=First@First[SortBy[FindPeaks[MedianFilter[ydata,3],200,10^-6,threshold],First]]; (* Finds the peak with the lowest wavelength *)
+	Return[xydata[[Floor[datapoint]]]]
+]
+
+
+(* ::Subsection:: *)
 (*Coordinate picking and simple background subtraction*)
 
 
@@ -167,15 +184,25 @@ ToWaveEl[crd_]:={crd[[1,1]],{crd[[2,1]],crd[[3,1]]},crd[[4,1]]}
 (*Initialize coordinate list:*)
 
 
-CoordInit[Spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list,xmin,xmax},
+CoordInit[spectra_,center_,d_,ypos_:1200]:=Module[{\[Lambda]list,xmin,xmax,centerguess,ylist,coordlist},
+ylist=Table[1/2(Max[spectra[[i]]\[Transpose][[2]]]+Min[spectra[[i]]\[Transpose][[2]]]),{i,1,Length[spectra]}];
+centerguess=First/@(FindPeakXY/@spectra);
 \[Lambda]list=Table[
-xmin=Min[Spectra[[i]]\[Transpose][[1]]];
-xmax=Max[Spectra[[i]]\[Transpose][[1]]];
-{center,{Max[xmin,center-d/2],Min[xmax,center+d/2]},Max[xmin+(xmax-xmin)/8,center-3d/8]},{i,1,Length[Spectra]}
+	xmin=Min[spectra[[i]]\[Transpose][[1]]];
+	xmax=Max[spectra[[i]]\[Transpose][[1]]];
+	{
+		If[Abs[centerguess[[i]]-center]>d/2,center,centerguess[[i]]],
+		{Max[xmin,center-d/2],Min[xmax,center+d/2]},
+		Max[xmin+(xmax-xmin)/8,center-3d/8]
+	},
+	{i,1,Length[spectra]}
+	];
+coordlist=Table[ToFourCoord[\[Lambda]list[[i]],ylist[[i]]],{i,1,Length[spectra]}];
+Return[coordlist];
 ];
-Return[ToFourCoord[#,ypos]&/@\[Lambda]list]
-];
-CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (second argument) and the spread in peak positions (third argument) \nThese initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.";
+CoordInit::usage="Taking the list of spectra in the first argument, generate a coordinate list of initial guesses based on the center position (second argument) and the spread in peak positions (third argument).
+These initial guesses will be returned as a list of guesses in the format {center, {left of range, right of range}, background point}.
+The program attempts to guess the center point based on the highest peak as long as it is in the range.";
 
 
 (* ::Text:: *)
